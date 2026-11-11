@@ -40,12 +40,17 @@ main{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:12px;padding:12p
 .col{display:grid;gap:12px;min-width:0}
 
 /* 2. filter area */
-.tabs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}
-.tab{padding:2px 10px;border:1px solid var(--line);border-radius:999px;background:var(--bg);color:var(--fg);cursor:pointer;font-size:12px}
-.tab.on{background:var(--accent);border-color:var(--accent);color:#fff}
-.sks{display:flex;flex-wrap:wrap;gap:4px}
-.sk{padding:2px 9px;border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--fg);cursor:pointer;font-size:12px}
-.sk.on{border-color:var(--accent);color:var(--accent);font-weight:600}
+.tabs{display:flex;flex-wrap:wrap;gap:0 2px;border-bottom:1px solid var(--line)}
+.tab{padding:5px 10px;margin-bottom:-1px;border:1px solid transparent;border-bottom:none;border-radius:6px 6px 0 0;background:none;color:var(--muted);cursor:pointer;font-size:12px}
+.tab:hover{color:var(--fg)}
+.tab.on{border-color:var(--line);background:var(--panel);color:var(--fg);font-weight:600;box-shadow:inset 0 2px 0 var(--accent)}
+.tab .n{margin-left:4px;padding:0 5px;border-radius:999px;background:var(--accent);color:#fff;font-size:10px}
+.sks{display:flex;flex-wrap:wrap;gap:4px;padding:8px;border:1px solid var(--line);border-top:none;border-radius:0 0 6px 6px}
+.sk{padding:2px 9px 2px 6px;border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--fg);cursor:pointer;font-size:12px}
+.sk::before{content:'☐';margin-right:4px;color:var(--muted)}
+.sk.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.sk.on::before{content:'☑';color:#fff}
+.sk.on small{color:#fff}
 .sk small{color:var(--muted);font-size:10px;margin-left:3px}
 
 /* 3. gear list */
@@ -96,7 +101,8 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px;font-weight:60
 <div class="col">
   
   <section>
-    <h2>依技能篩選（可複選，符合越多排越前）</h2>
+    <h2>依技能篩選</h2>
+    <p class="note" style="margin:0 0 6px">上方頁籤切換技能分類；勾選技能可複選（跨分類也可），裝備符合越多排越前。</p>
     <div class="tabs" id="grpTabs"></div>
     <div class="sks" id="sks"></div>
   </section>
@@ -202,17 +208,16 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px;font-weight:60
     }).join('');
     $('chosen').innerHTML = st.sel.size
       ? '篩選技能：' + [...st.sel].map(id => `<button type="button" class="chip" data-unsel="${id}" title="取消">${skZh(id)}</button>`).join('') + '<button type="button" class="chip clear" data-unsel="*">全部清除</button>'
-      : (curGroup().key === 'all' ? '尚未選擇篩選技能（在下方技能頁籤點選）' : `目前分類：${curGroup().label}（顯示帶任一此類技能的裝備；點技能可再細選）`);
+      : '尚未勾選篩選技能（在下方分類頁籤裡勾選，可複選）';
   }
   function renderFilter(){
     const g = GROUPS.find(x => x.key === st.group) || GROUPS[0];
-    $('grpTabs').innerHTML = GROUPS.map(x => `<button type="button" class="tab ${x.key===g.key?'on':''}" data-grp="${x.key}">${x.label} ${x.ids.length}</button>`).join('');
+    $('grpTabs').innerHTML = GROUPS.map(x => `<button type="button" class="tab ${x.key===g.key?'on':''}" data-grp="${x.key}">${x.label}${(() => { const n = x.ids.filter(id => st.sel.has(id)).length; return n ? `<span class="n">${n}</span>` : ''; })()}</button>`).join('');
     const slotItems = itemsFor(st.active);
     const cnt = (id) => slotItems.filter(i => i.skills.some(([s]) => s === id)).length;
     $('sks').innerHTML = g.ids.map(id => `<button type="button" class="sk ${st.sel.has(id)?'on':''}" data-sk="${id}">${skZh(id)}<small>${cnt(id)}</small></button>`).join('');
   }
-  const curGroup = () => GROUPS.find(x => x.key === st.group) || GROUPS[0];
-  const filterSet = () => st.sel.size ? st.sel : new Set(curGroup().key === 'all' ? [] : curGroup().ids);
+  const filterSet = () => st.sel;
   function renderList(){
     const cur = st.active === 'weapon' ? st.weapon : st.armor[st.active];
     const F = filterSet();
@@ -264,7 +269,7 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px;font-weight:60
 
   $('tiles').addEventListener('click', (e) => { const t = e.target.closest('[data-slot]'); if (!t) return; st.active = t.dataset.slot; renderAll(); });
   $('chosen').addEventListener('click', (e) => { const c = e.target.closest('[data-unsel]'); if (!c) return; if (c.dataset.unsel === '*') st.sel.clear(); else st.sel.delete(c.dataset.unsel); renderAll(); });
-  $('grpTabs').addEventListener('click', (e) => { const t = e.target.closest('[data-grp]'); if (!t) return; st.group = t.dataset.grp; renderAll(); save(); });
+  $('grpTabs').addEventListener('click', (e) => { const t = e.target.closest('[data-grp]'); if (!t) return; st.group = t.dataset.grp; renderFilter(); save(); });
   $('sks').addEventListener('click', (e) => { const t = e.target.closest('[data-sk]'); if (!t) return; const id = t.dataset.sk; if (st.sel.has(id)) st.sel.delete(id); else st.sel.add(id); renderAll(); });
   $('q').addEventListener('input', () => { st.q = $('q').value; renderList(); });
   $('list').addEventListener('click', (e) => {
