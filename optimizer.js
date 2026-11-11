@@ -3,6 +3,8 @@
   const M = typeof module !== 'undefined' ? require('./damage.js') : root.MHNDamage;
   const SLOTS = ['head', 'chest', 'arms', 'waist', 'legs'];
   const STATUS = ['poison', 'paralysis', 'sleep', 'blast'];
+  const SELF_AILMENT = ['hellfire-cloak', 'blood-cloak'];
+  const HUNTER_AILMENT_CONDS = new Set(['player.statusAilment', 'recoveredFromStatus']);
   const DIRECT = ['fire', 'water', 'thunder', 'ice', 'dragon'];
   const BASE = {
     weapon: 'GREAT_SWORD', attenuation: 1, spMove: false, spAttackPercentage: 100, affectBySpirit: false,
@@ -50,6 +52,7 @@
       if (c === 'chargedAttack') return charge;
       if (c === 'perfectChargeRelease') return charge && cond.has(c);
       if (c === 'wakeUpHit' || c === 'monster.sleeping') return cond.has('monster.sleeping') || cond.has('wakeUpHit');
+      if (HUNTER_AILMENT_CONDS.has(c)) return cond.has(c) && SELF_AILMENT.some((id) => (levels[id] || 0) > 0);
       return cond.has(c);
     };
     if ((eff.requires || []).some((c) => !has(c))) return false;
@@ -113,7 +116,9 @@
       const top = s.levels[String(s.max)];
       const fake = { [id]: s.max };
       if (top && top.requiresSkillLevel) fake[top.requiresSkillLevel.skillId] = 99;
-      if (active(top, w, ctx, fake)) { out.add(id); if (top.requiresSkillLevel) out.add(top.requiresSkillLevel.skillId); }
+      const needsSelf = top && (top.requires || []).some((c) => HUNTER_AILMENT_CONDS.has(c));
+      if (needsSelf) SELF_AILMENT.forEach((x) => { fake[x] = 1; });
+      if (active(top, w, ctx, fake)) { out.add(id); if (top.requiresSkillLevel) out.add(top.requiresSkillLevel.skillId); if (needsSelf) SELF_AILMENT.forEach((x) => out.add(x)); }
     }
     return out;
   }
