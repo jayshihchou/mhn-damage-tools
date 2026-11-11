@@ -119,11 +119,11 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
   <div id="out"></div>
 </section>
 </main>
-<script src="data.js?v=2026111107"></script>
-<script src="damage.js?v=2026111107"></script>
-<script src="optimizer.js?v=2026111107"></script>
-<script src="picker.js?v=2026111107"></script>
-<script src="compare-core.js?v=2026111107"></script>
+<script src="data.js?v=2026111108"></script>
+<script src="damage.js?v=2026111108"></script>
+<script src="optimizer.js?v=2026111108"></script>
+<script src="picker.js?v=2026111108"></script>
+<script src="compare-core.js?v=2026111108"></script>
 <script>
 (function(){
   const D = window.MHN_DATA, O = window.MHNOptimizer, $ = (id) => document.getElementById(id);
@@ -248,7 +248,7 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
     };
     $('go').disabled = true; $('prog').hidden = false; $('prog').value = 0;
     $('summary').textContent = '計算中…'; $('out').innerHTML = '';
-    worker = new Worker('optimizer-worker.js?v=2026111106');
+    worker = new Worker('optimizer-worker.js?v=2026111108');
     worker.onmessage = (ev) => {
       const m = ev.data;
       if (m.type === 'progress') { $('prog').max = m.n; $('prog').value = m.i; return; }
