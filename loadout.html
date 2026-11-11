@@ -28,6 +28,7 @@ section{background:var(--panel);border:1px solid var(--line);border-radius:8px;p
 .tile b{display:block;font-size:11px;color:var(--muted);font-weight:500}
 .tile .nm{display:block;font-weight:600;font-size:13px}
 .tile small{display:block;font-size:11px;color:var(--muted);line-height:1.35}
+.tile small.dr{color:var(--weak)}
 .tile.on{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset;background:var(--hi)}
 .chosen{display:flex;flex-wrap:wrap;gap:4px;align-items:center;max-width:1500px;margin:6px auto 0;font-size:12px;min-height:22px;color:var(--muted)}
 .chip{padding:1px 9px;border-radius:999px;border:0;background:var(--accent);color:#fff;cursor:pointer;font-size:12px}
@@ -142,11 +143,11 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px;font-weight:60
   </section>
 </div>
 </main>
-<script src="data.js?v=2026111108"></script>
-<script src="damage.js?v=2026111108"></script>
-<script src="optimizer.js?v=2026111108"></script>
-<script src="picker.js?v=2026111108"></script>
-<script src="compare-core.js?v=2026111108"></script>
+<script src="data.js?v=2026111201"></script>
+<script src="damage.js?v=2026111201"></script>
+<script src="optimizer.js?v=2026111201"></script>
+<script src="picker.js?v=2026111201"></script>
+<script src="compare-core.js?v=2026111201"></script>
 <script>
 (function(){
   const D = window.MHN_DATA, O = window.MHNOptimizer, M = window.MHNDamage, $ = (id) => document.getElementById(id);
@@ -203,8 +204,9 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px;font-weight:60
     const sk = (list) => list.map(([id,l]) => `${skZh(id)} ${l}`).join('、') || '無技能';
     $('tiles').innerHTML = SLOTS.map(s => {
       if (s === 'weapon') return `<button type="button" class="tile ${st.active===s?'on':''}" data-slot="weapon"><b>武器｜${ELEM_ZH[w.element]}${w.style && styleLevel() ? '｜風格 Lv20' : ''}</b><span class="nm">${w.zh||w.name}</span><small>${sk(O.weaponSkills(w, styleLevel()))}</small></button>`;
-      const a = byId[st.armor[s]];
-      return `<button type="button" class="tile ${st.active===s?'on':''}" data-slot="${s}"><b>${SLOT_ZH[s]}｜漂流 ${a.driftSlots}</b><span class="nm">${a.zh||a.name}</span><small>${sk(a.skills)}</small></button>`;
+      const a = byId[st.armor[s]], ds = driftOwner().filter(x => x.slot === s).map(x => st.drifts[x.i]);
+      const dl = ds.length ? `<small class="dr">漂流石：${ds.map(id => { const d = D.drifts.find(x => x.id === id); return d ? `${skZh(d.skill)} ${d.level}` : '（空）'; }).join('、')}</small>` : '';
+      return `<button type="button" class="tile ${st.active===s?'on':''}" data-slot="${s}"><b>${SLOT_ZH[s]}｜漂流 ${a.driftSlots}</b><span class="nm">${a.zh||a.name}</span><small>${sk(a.skills)}</small>${dl}</button>`;
     }).join('');
     $('chosen').innerHTML = st.sel.size
       ? '篩選技能：' + [...st.sel].map(id => `<button type="button" class="chip" data-unsel="${id}" title="取消">${skZh(id)}</button>`).join('') + '<button type="button" class="chip clear" data-unsel="*">全部清除</button>'
@@ -231,10 +233,11 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px;font-weight:60
   }
 
   const DRIFT_OPTS = [['', '（空）'], ...D.drifts.map(d => [d.id, `${skZh(d.skill)} Lv${d.level}`]).sort((a,b) => a[1].localeCompare(b[1],'zh-Hant'))];
+  const driftOwner = () => { const out = []; for (const s of SLOTS) if (s !== 'weapon') for (let j = 0; j < byId[st.armor[s]].driftSlots; j++) out.push({ slot: s, i: out.length, j }); return out; };
   function renderDrifts(){
     const n = O.SLOTS.reduce((t,s) => t + byId[st.armor[s]].driftSlots, 0);
     st.drifts = [...st.drifts.slice(0, n), ...Array(Math.max(0, n - st.drifts.length)).fill('')];
-    $('driftBox').innerHTML = n ? st.drifts.map((v,i) => `<label>槽 ${i+1}<select data-i="${i}">${DRIFT_OPTS.map(([k,t]) => `<option value="${k}" ${k===v?'selected':''}>${t}</option>`).join('')}</select></label>`).join('') : '<p class="note">這套防具沒有漂流石槽。</p>';
+    $('driftBox').innerHTML = n ? st.drifts.map((v,i) => `<label>${(o => o ? SLOT_ZH[o.slot] + ' 槽 ' + (o.j+1) : '槽 ' + (i+1))(driftOwner()[i])}<select data-i="${i}">${DRIFT_OPTS.map(([k,t]) => `<option value="${k}" ${k===v?'selected':''}>${t}</option>`).join('')}</select></label>`).join('') : '<p class="note">這套防具沒有漂流石槽。</p>';
   }
   function syncStyle(){
     const w = weapon();
@@ -277,7 +280,7 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px;font-weight:60
     if (st.active === 'weapon') { st.weapon = it.dataset.id; syncStyle(); } else { st.armor[st.active] = it.dataset.id; renderDrifts(); }
     renderAll();
   });
-  $('driftBox').addEventListener('change', (e) => { const i = e.target.dataset.i; if (i != null) { st.drifts[i] = e.target.value; compute(); save(); } });
+  $('driftBox').addEventListener('change', (e) => { const i = e.target.dataset.i; if (i != null) { st.drifts[i] = e.target.value; renderTiles(); compute(); save(); } });
   $('monster').addEventListener('change', () => { refreshParts(); compute(); save(); });
   ['part','move','spPct','styleOn','pick0','pick1','pick2','ferocityChance'].forEach(id => { $(id).addEventListener('change', () => { renderTiles(); compute(); save(); }); $(id).addEventListener('input', () => { compute(); save(); }); });
   $('conds').addEventListener('change', () => { compute(); save(); });

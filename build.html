@@ -41,6 +41,8 @@ progress{width:100%;height:6px}
 @media (max-width:500px){.grid{grid-template-columns:1fr 1fr}}
 .slot small.gs{display:block;margin-top:3px;color:var(--muted);font-size:11px;line-height:1.35}
 .slot small.gs i{font-style:normal;color:var(--accent)}
+.slot small.dr{display:block;margin-top:3px;font-size:11px;line-height:1.35;color:var(--weak)}
+.slot small.dr.empty{color:var(--muted)}
 .card.has-alts{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:12px}
 @media (max-width:1100px){.card.has-alts{grid-template-columns:1fr}}
 .alts{border-left:1px solid var(--line);padding-left:12px;font-size:12px}
@@ -119,11 +121,11 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
   <div id="out"></div>
 </section>
 </main>
-<script src="data.js?v=2026111108"></script>
-<script src="damage.js?v=2026111108"></script>
-<script src="optimizer.js?v=2026111108"></script>
-<script src="picker.js?v=2026111108"></script>
-<script src="compare-core.js?v=2026111108"></script>
+<script src="data.js?v=2026111201"></script>
+<script src="damage.js?v=2026111201"></script>
+<script src="optimizer.js?v=2026111201"></script>
+<script src="picker.js?v=2026111201"></script>
+<script src="compare-core.js?v=2026111201"></script>
 <script>
 (function(){
   const D = window.MHN_DATA, O = window.MHNOptimizer, $ = (id) => document.getElementById(id);
@@ -248,7 +250,7 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
     };
     $('go').disabled = true; $('prog').hidden = false; $('prog').value = 0;
     $('summary').textContent = '計算中…'; $('out').innerHTML = '';
-    worker = new Worker('optimizer-worker.js?v=2026111108');
+    worker = new Worker('optimizer-worker.js?v=2026111201');
     worker.onmessage = (ev) => {
       const m = ev.data;
       if (m.type === 'progress') { $('prog').max = m.n; $('prog').value = m.i; return; }
@@ -277,6 +279,8 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
       const cur = byId[r.armor[s]], act = r.activeSkills.map(([id]) => id);
       return D.armor.filter(a => a.slot === s && a.id !== cur.id && a.driftSlots === cur.driftSlots && act.every(id => contrib(a, id) === contrib(cur, id)));
     };
+    const driftsBySlot = (r) => { let k = 0; return Object.fromEntries(O.SLOTS.map(s => [s, Array.from({ length: byId[r.armor[s]].driftSlots }, () => drById[r.drifts[k++]])])); };
+    const driftLine = (list) => list.length ? `<small class="dr ${list.some(Boolean) ? '' : 'empty'}">漂流石：${list.map(d => d ? `${D.skills[d.skill].zh || d.skill} Lv${d.level}` : '（空）').join('、')}</small>` : '';
     const driftTxtOf = (r) => { const ds = r.drifts.map(id => { const d = drById[id]; return (D.skills[d.skill].zh || d.skill); }); return ds.length ? Object.entries(ds.reduce((a,x)=>(a[x]=(a[x]||0)+1,a),{})).map(([k,v]) => `${k}×${v}`).join('、') : '無'; };
     const altRow = (main, j) => {
       const r = m.results[j], w = D.weapons.find(x => x.id === r.weaponId), diff = [];
@@ -297,11 +301,12 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
       const driftTxt = drifts.length ? Object.entries(drifts.reduce((a,x)=>(a[x]=(a[x]||0)+1,a),{})).map(([k,v]) => `${k}×${v}`).join('、') : '無';
       const skills = r.activeSkills.map(([id,l]) => `${D.skills[id].zh||id} Lv${l}`).join('、') || '無';
       const inp = r.input;
+      const dbs = driftsBySlot(r);
       const sw = (s) => { const x = swaps(r, s); return x.length ? `<small class="swap">可替換：${x.map(a => a.zh||a.name).join('、')}</small>` : ''; };
       return `<div class="card ${gi===0?'top':''} ${g.alts.length?'has-alts':''}"><div class="main">
         <h3><span class="rank">#${gi+1}</span>${w.zh||w.name}<small>（${ELEM_ZH[w.element]}${styleTxt}）</small>
           <span class="score">${metric==='expected' ? r.expected.toFixed(0) : r.score.toLocaleString()}</span></h3>
-        <div class="grid"><div class="slot"><b>武器</b>${w.zh||w.name}${gearSkills(O.weaponSkills(w, r.style ? ctx.styleLevel : 0), w.style && r.style ? (w.styleSkills||[]) : [])}</div>${O.SLOTS.map(s => `<div class="slot"><b>${SLOT_ZH[s]}（漂流 ${byId[r.armor[s]].driftSlots}）</b>${byId[r.armor[s]].zh||byId[r.armor[s]].name}${gearSkills(byId[r.armor[s]].skills)}${sw(s)}</div>`).join('')}</div>
+        <div class="grid"><div class="slot"><b>武器</b>${w.zh||w.name}${gearSkills(O.weaponSkills(w, r.style ? ctx.styleLevel : 0), w.style && r.style ? (w.styleSkills||[]) : [])}</div>${O.SLOTS.map(s => `<div class="slot"><b>${SLOT_ZH[s]}（漂流 ${byId[r.armor[s]].driftSlots}）</b>${byId[r.armor[s]].zh||byId[r.armor[s]].name}${gearSkills(byId[r.armor[s]].skills)}${driftLine(dbs[s])}${sw(s)}</div>`).join('')}</div>
         <div class="nums">
           <span class="${cls('none')}">無會心 ${val('none')}${pct('none')}</span>
           <span class="${cls('crit')}">會心 ${val('plus')}${pct('plus')}</span>
@@ -310,7 +315,7 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
           <span class="${cls('expected')}">期望 ${r.expected.toFixed(0)}</span>
         </div>
         <div class="skills">攻擊 ${r.base.ATK}｜屬性 ${r.base.ELE}｜會心率 ${r.rate}%｜傷害加成 +${inp.damageAddPct.toFixed(0)}%${inp.extraMul !== 1 ? ` ×${inp.extraMul.toFixed(2)}` : ''}｜肉質 ${r.base.physPct}${r.base.weakPoint?'（弱點）':''}</div>
-        <div class="skills">漂流石：${driftTxt}</div>
+        <div class="skills">漂流石合計：${driftTxt}</div>
         <div class="skills">發動技能：${skills}</div>
         ${m.profiles > 1 ? `<div class="skills">採用條件：${(r.profile||[]).map(c => COND_ZH[c]||c).join('、')}</div>` : ''}
         <button type="button" class="edit" data-i="${i}">編輯這套配裝 →</button> <button type="button" class="edit cmp" data-c="${i}">＋加入比較</button>
