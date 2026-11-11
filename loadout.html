@@ -202,7 +202,7 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px;font-weight:60
     }).join('');
     $('chosen').innerHTML = st.sel.size
       ? '篩選技能：' + [...st.sel].map(id => `<button type="button" class="chip" data-unsel="${id}" title="取消">${skZh(id)}</button>`).join('') + '<button type="button" class="chip clear" data-unsel="*">全部清除</button>'
-      : '尚未選擇篩選技能（在下方技能頁籤點選）';
+      : (curGroup().key === 'all' ? '尚未選擇篩選技能（在下方技能頁籤點選）' : `目前分類：${curGroup().label}（顯示帶任一此類技能的裝備；點技能可再細選）`);
   }
   function renderFilter(){
     const g = GROUPS.find(x => x.key === st.group) || GROUPS[0];
@@ -211,14 +211,17 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px;font-weight:60
     const cnt = (id) => slotItems.filter(i => i.skills.some(([s]) => s === id)).length;
     $('sks').innerHTML = g.ids.map(id => `<button type="button" class="sk ${st.sel.has(id)?'on':''}" data-sk="${id}">${skZh(id)}<small>${cnt(id)}</small></button>`).join('');
   }
+  const curGroup = () => GROUPS.find(x => x.key === st.group) || GROUPS[0];
+  const filterSet = () => st.sel.size ? st.sel : new Set(curGroup().key === 'all' ? [] : curGroup().ids);
   function renderList(){
     const cur = st.active === 'weapon' ? st.weapon : st.armor[st.active];
-    const match = (i) => i.skills.filter(([id]) => st.sel.has(id)).length;
+    const F = filterSet();
+    const match = (i) => i.skills.filter(([id]) => F.has(id)).length;
     const q = st.q.trim().toLowerCase();
-    let vis = itemsFor(st.active).filter(i => (!st.sel.size || match(i) > 0) && (!q || (i.name + ' ' + i.skills.map(([id]) => skZh(id)).join(' ')).toLowerCase().includes(q)));
-    if (st.sel.size) vis.sort((a,b) => match(b) - match(a));
+    let vis = itemsFor(st.active).filter(i => (!F.size || match(i) > 0) && (!q || (i.name + ' ' + i.skills.map(([id]) => skZh(id)).join(' ')).toLowerCase().includes(q)));
+    if (F.size) vis.sort((a,b) => match(b) - match(a));
     $('listTitle').textContent = `可選${SLOT_ZH[st.active]}（${vis.length} 件）`;
-    $('list').innerHTML = vis.map(i => `<button type="button" class="item ${i.id===cur?'sel':''}" data-id="${i.id}">${i.name}<small>${i.pre}</small><small>${i.skills.map(([id,l]) => st.sel.has(id) ? `<mark>${skZh(id)} ${l}</mark>` : `${skZh(id)} ${l}`).join('、') || '無技能'}</small></button>`).join('')
+    $('list').innerHTML = vis.map(i => `<button type="button" class="item ${i.id===cur?'sel':''}" data-id="${i.id}">${i.name}<small>${i.pre}</small><small>${i.skills.map(([id,l]) => F.has(id) ? `<mark>${skZh(id)} ${l}</mark>` : `${skZh(id)} ${l}`).join('、') || '無技能'}</small></button>`).join('')
       || `<div class="empty">沒有帶這些技能的${SLOT_ZH[st.active]}。</div>`;
   }
 
@@ -261,7 +264,7 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px;font-weight:60
 
   $('tiles').addEventListener('click', (e) => { const t = e.target.closest('[data-slot]'); if (!t) return; st.active = t.dataset.slot; renderAll(); });
   $('chosen').addEventListener('click', (e) => { const c = e.target.closest('[data-unsel]'); if (!c) return; if (c.dataset.unsel === '*') st.sel.clear(); else st.sel.delete(c.dataset.unsel); renderAll(); });
-  $('grpTabs').addEventListener('click', (e) => { const t = e.target.closest('[data-grp]'); if (!t) return; st.group = t.dataset.grp; renderFilter(); save(); });
+  $('grpTabs').addEventListener('click', (e) => { const t = e.target.closest('[data-grp]'); if (!t) return; st.group = t.dataset.grp; renderAll(); save(); });
   $('sks').addEventListener('click', (e) => { const t = e.target.closest('[data-sk]'); if (!t) return; const id = t.dataset.sk; if (st.sel.has(id)) st.sel.delete(id); else st.sel.add(id); renderAll(); });
   $('q').addEventListener('input', () => { st.q = $('q').value; renderList(); });
   $('list').addEventListener('click', (e) => {
