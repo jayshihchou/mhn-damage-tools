@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MHN 配裝編輯</title>
+<style>
+:root{--bg:#f7f7f5;--panel:#fff;--fg:#1d1d1b;--muted:#6b6b66;--line:#e2e1dc;--accent:#b4501e;--weak:#1f7a4d;--hi:#fff3e8;}
+@media (prefers-color-scheme:dark){:root{--bg:#161614;--panel:#1f1f1c;--fg:#ecebe6;--muted:#9a9993;--line:#34332f;--accent:#e58a52;--weak:#5fcf95;--hi:#2c2219;}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,"Noto Sans TC","Microsoft JhengHei",sans-serif}
+header{padding:10px 16px;display:flex;gap:16px;align-items:baseline;flex-wrap:wrap}
+header h1{margin:0;font-size:18px}
+header a{color:var(--accent)}
+input,select,button{font:inherit}
+input,select{width:100%;padding:4px 6px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:4px}
+input[type=checkbox]{width:auto;margin:0 6px 0 0}
+h2{font-size:13px;margin:12px 0 8px;color:var(--accent);letter-spacing:.04em}
+h2:first-child{margin-top:0}
+.note{color:var(--muted);font-size:12px;margin:4px 0}
+section{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;min-width:0}
+
+/* 1. gear bar: always on top */
+#gearbar{position:sticky;top:0;z-index:5;background:var(--bg);padding:8px 16px 6px;border-bottom:1px solid var(--line)}
+.tiles{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;max-width:1500px;margin:auto}
+@media (max-width:800px){.tiles{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.tile{text-align:left;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--fg);padding:6px 8px;cursor:pointer;min-height:74px}
+.tile b{display:block;font-size:11px;color:var(--muted);font-weight:500}
+.tile .nm{display:block;font-weight:600;font-size:13px}
+.tile small{display:block;font-size:11px;color:var(--muted);line-height:1.35}
+.tile.on{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset;background:var(--hi)}
+.chosen{display:flex;flex-wrap:wrap;gap:4px;align-items:center;max-width:1500px;margin:6px auto 0;font-size:12px;min-height:22px;color:var(--muted)}
+.chip{padding:1px 9px;border-radius:999px;border:0;background:var(--accent);color:#fff;cursor:pointer;font-size:12px}
+.chip::after{content:' ✕'}
+.chip.clear{background:transparent;color:var(--muted);border:1px solid var(--line)}
+.chip.clear::after{content:''}
+
+main{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:12px;padding:12px 16px;max-width:1500px;margin:auto;align-items:start}
+@media (max-width:1000px){main{grid-template-columns:1fr}}
+.col{display:grid;gap:12px;min-width:0}
+
+/* 2. filter area */
+.tabs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}
+.tab{padding:2px 10px;border:1px solid var(--line);border-radius:999px;background:var(--bg);color:var(--fg);cursor:pointer;font-size:12px}
+.tab.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.sks{display:flex;flex-wrap:wrap;gap:4px}
+.sk{padding:2px 9px;border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--fg);cursor:pointer;font-size:12px}
+.sk.on{border-color:var(--accent);color:var(--accent);font-weight:600}
+.sk small{color:var(--muted);font-size:10px;margin-left:3px}
+
+/* 3. gear list */
+.listhead{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+.listhead h2{margin:0}
+.listhead input{max-width:220px;margin-left:auto}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px}
+.item{text-align:left;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);cursor:pointer;font-size:13px;line-height:1.35}
+.item small{display:block;color:var(--muted);font-size:11px}
+.item mark{background:none;color:var(--accent);font-weight:600}
+.item.sel{border-color:var(--accent);outline:1px solid var(--accent)}
+.empty{color:var(--muted);font-size:12px;padding:6px}
+
+/* results + settings */
+.nums{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px;margin:8px 0}
+.num{border:1px solid var(--line);border-radius:8px;padding:6px 8px}
+.num b{display:block;font-size:18px;font-variant-numeric:tabular-nums}
+.num small{color:var(--muted);font-size:11px}
+.num.main{border-color:var(--accent);background:var(--hi)}
+table{border-collapse:collapse;width:100%;font-size:12px}
+td,th{padding:3px 6px;border-bottom:1px solid var(--line);text-align:left}
+td.off{color:var(--muted)}
+.tag{font-size:11px;color:var(--muted)}
+.tag.on{color:var(--weak)}
+label{display:grid;grid-template-columns:100px 1fr;align-items:center;gap:8px;margin:4px 0}
+.chips{display:grid;grid-template-columns:1fr 1fr;gap:2px 10px}
+.chips label{display:flex;margin:2px 0;font-size:12px}
+.row3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.addcmp{padding:4px 12px;border:1px solid var(--accent);color:var(--accent);background:transparent;border-radius:6px;cursor:pointer;margin-bottom:6px}
+details summary{cursor:pointer;color:var(--accent);font-size:13px;font-weight:600}
+</style>
+</head>
+<body>
+<header>
+  <h1>MHN 配裝編輯</h1>
+  <a href="build.html">← 最高傷害配裝</a>
+  <a href="index.html">傷害計算器</a>
+  <a href="compare.html">配裝比較</a>
+</header>
+
+
+<div id="gearbar">
+  <div class="tiles" id="tiles"></div>
+  <div class="chosen" id="chosen"></div>
+</div>
+
+<main>
+<div class="col">
+  
+  <section>
+    <h2>依技能篩選（可複選，符合越多排越前）</h2>
+    <div class="tabs" id="grpTabs"></div>
+    <div class="sks" id="sks"></div>
+  </section>
+  
+  <section>
+    <div class="listhead"><h2 id="listTitle"></h2><input id="q" placeholder="搜尋名稱或技能…"></div>
+    <div class="grid" id="list"></div>
+  </section>
+</div>
+
+<div class="col">
+  <section>
+    <div id="summary" class="note"></div>
+    <div class="nums" id="nums"></div>
+    <button type="button" id="addCmp" class="addcmp">＋加入比較</button>
+    <div class="note" id="stats"></div>
+    <h2>技能合計</h2>
+    <table id="skills"></table>
+  </section>
+  <section>
+    <details open><summary>目標與招式</summary>
+      <label>怪物<select id="monster"></select></label>
+      <label>部位<select id="part"></select></label>
+      <label>招式<select id="move"></select></label>
+      <label>SP 攻擊 %<input id="spPct" type="number" value="110"></label>
+    </details>
+    <details open id="styleBox"><summary>風格強化</summary>
+      <label>等級<select id="styleOn"><option value="20">Lv20</option><option value="0">不強化</option></select></label>
+      <div class="row3" id="picks"></div>
+      <p class="note" id="styleNote"></p>
+    </details>
+    <details open><summary>漂流石</summary><div id="driftBox"></div></details>
+    <details open><summary>戰鬥狀況</summary>
+      <div class="chips" id="conds"></div>
+      <label>凶會心機率 %<input id="ferocityChance" type="number" value="100"></label>
+    </details>
+  </section>
+</div>
+</main>
+<script src="data.js?v=2026111107"></script>
+<script src="damage.js?v=2026111107"></script>
+<script src="optimizer.js?v=2026111107"></script>
+<script src="picker.js?v=2026111107"></script>
+<script src="compare-core.js?v=2026111107"></script>
+<script>
+(function(){
+  const D = window.MHN_DATA, O = window.MHNOptimizer, M = window.MHNDamage, $ = (id) => document.getElementById(id);
+  const ELEM_ZH = {none:'無',fire:'火',water:'水',thunder:'雷',ice:'冰',dragon:'龍',poison:'毒',paralysis:'麻痺',sleep:'睡眠',blast:'爆破'};
+  const SLOT_ZH = {weapon:'武器',head:'頭',chest:'胸',arms:'腕',waist:'腰',legs:'腳'};
+  const STATE_ZH = {'(default)':'通常', Default:'通常', Broken:'破壞後', Rage:'憤怒', Iced:'冰凍', Hellfire:'獄炎', Sparking:'帶電', BubbleFoam:'泡沫'};
+  const COND_ZH = {'risingTide2':'愈戰愈勇疊 2 層（狩獵經過 52 秒）','forwardDodge':'向前迴避後（10 秒內）','latentPower':'力量解放發動','afterRoar':'咆哮後','afterSpecialSkill':'SP 技能後','attackFromBehind':'從背後攻擊',
+    'consecutiveHits':'連續命中','groupHunt':'多人狩獵','hp.full':'體力全滿','hp.low':'體力低','monster.paralyzed':'怪物麻痺中',
+    'monster.partBroken':'部位已破壞','monster.poisoned':'怪物中毒','monster.sleeping':'怪物睡眠中（叫醒攻擊）','noEvade10s':'10 秒未迴避',
+    'perfectChargeRelease':'完美蓄力','perfectEvade':'完美迴避後','perfectGuard':'完美防禦後','player.bloodblight':'劫血狀態',
+    'player.statusAilment':'獵人異常狀態','recoveredFromStatus':'異常恢復後','revived':'倒地復活後','spGaugeFull':'SP 量表全滿',
+    'spGaugeNotFull':'SP 量表未滿','tookDamage':'受到傷害後','statusBuildupProc':'異常累積觸發時'};
+  const HIDDEN = new Set(['monster.weakPoint', 'chargedAttack', 'wakeUpHit']);
+  const KIND_ZH = {none:'無會心', plus:'會心', ferocity:'凶會心', minus:'負會心'};
+  const PICK_ZH = {attack:'攻擊', element:'屬性', affinity:'會心'};
+  const SLOTS = ['weapon', ...O.SLOTS];
+  const fill = (sel, items) => { sel.innerHTML = items.map(([v,t]) => `<option value="${v}">${t}</option>`).join(''); };
+  const skZh = (id) => (D.skills[id] && D.skills[id].zh) || (D.skillNames || {})[id] || id;
+  const byId = Object.fromEntries(D.armor.map(a => [a.id, a]));
+  const wById = Object.fromEntries(D.weapons.map(w => [w.id, w]));
+
+  const st = { weapon: D.weapons[0].id, armor: {}, drifts: [], active: 'weapon', sel: new Set(), group: 'all', q: '' };
+  O.SLOTS.forEach(s => st.armor[s] = D.armor.find(a => a.slot === s).id);
+
+  const ids = Object.keys(D.monsters).filter(m => D.monsters[m].parts.some(p => p.states.length));
+  const mName = (m) => MHNPicker.monsterName(D, m);
+  const sorted = [...ids.filter(m => D.monsters[m].zh).sort((a,b) => mName(a).localeCompare(mName(b),'zh-Hant')), ...ids.filter(m => !D.monsters[m].zh)];
+  fill($('monster'), sorted.map(m => [m, mName(m)]));
+  function refreshParts(keep){
+    const m = D.monsters[$('monster').value], items = [];
+    m.parts.forEach((p,pi) => p.states.forEach((s,si) => items.push([pi+':'+si, `${p.zh||p.key}${p.head?' ★':''}｜${STATE_ZH[s.s]||s.s}｜斬${s.p[0]} 打${s.p[1]} 彈${s.p[2]}`])));
+    fill($('part'), items);
+    if (keep && items.some(i => i[0] === keep)) { $('part').value = keep; return; }
+    let best = items[0] && items[0][0], bv = -1;
+    m.parts.forEach((p,pi) => p.states.forEach((s,si) => { if (s.p[0] > bv) { bv = s.p[0]; best = pi+':'+si; } }));
+    $('part').value = best;
+  }
+  const curState = () => { const [pi,si] = $('part').value.split(':').map(Number); return D.monsters[$('monster').value].parts[pi].states[si]; };
+  const MOVES = (D.moves && D.moves.GREAT_SWORD) || [];
+  fill($('move'), MOVES.map(m => [m.id, `${m.zh}（MV ${m.mv}${m.sp ? '，SP' : ''}${m.phys === 'blunt' ? '，打擊' : ''}）`]));
+  $('picks').innerHTML = [0,1,2].map(i => `<select id="pick${i}">${Object.entries(PICK_ZH).map(([k,v]) => `<option value="${k}">Lv${[10,15,20][i]} ${v}</option>`).join('')}</select>`).join('');
+  $('conds').innerHTML = D.conditions.filter(c => !HIDDEN.has(c)).map(c => `<label><input type="checkbox" value="${c}">${COND_ZH[c]||c}</label>`).join('');
+  const weapon = () => wById[st.weapon];
+  const styleLevel = () => weapon().style ? Number($('styleOn').value) : 0;
+
+  const itemsFor = (slot) => slot === 'weapon'
+    ? D.weapons.map(w => ({ id: w.id, name: w.zh || w.name, pre: `${ELEM_ZH[w.element]}${w.elementValue ? ' ' + w.elementValue : ''}｜攻 ${w.attack}${w.affinity ? `｜會心 ${w.affinity}%` : ''}${w.style ? '｜可風格強化' : ''}`, skills: O.weaponSkills(w, 20) }))
+    : D.armor.filter(a => a.slot === slot).map(a => ({ id: a.id, name: a.zh || a.name, pre: `漂流 ${a.driftSlots}`, skills: a.skills }));
+  const allSkillIds = [...new Set([...D.armor.flatMap(a => a.skills.map(([id]) => id)), ...D.weapons.flatMap(w => O.weaponSkills(w, 20).map(([id]) => id))])];
+  const GROUPS = MHNPicker.skillGroups(D, allSkillIds);
+
+  function renderTiles(){
+    const w = weapon();
+    const sk = (list) => list.map(([id,l]) => `${skZh(id)} ${l}`).join('、') || '無技能';
+    $('tiles').innerHTML = SLOTS.map(s => {
+      if (s === 'weapon') return `<button type="button" class="tile ${st.active===s?'on':''}" data-slot="weapon"><b>武器｜${ELEM_ZH[w.element]}${w.style && styleLevel() ? '｜風格 Lv20' : ''}</b><span class="nm">${w.zh||w.name}</span><small>${sk(O.weaponSkills(w, styleLevel()))}</small></button>`;
+      const a = byId[st.armor[s]];
+      return `<button type="button" class="tile ${st.active===s?'on':''}" data-slot="${s}"><b>${SLOT_ZH[s]}｜漂流 ${a.driftSlots}</b><span class="nm">${a.zh||a.name}</span><small>${sk(a.skills)}</small></button>`;
+    }).join('');
+    $('chosen').innerHTML = st.sel.size
+      ? '篩選技能：' + [...st.sel].map(id => `<button type="button" class="chip" data-unsel="${id}" title="取消">${skZh(id)}</button>`).join('') + '<button type="button" class="chip clear" data-unsel="*">全部清除</button>'
+      : '尚未選擇篩選技能（在下方技能頁籤點選）';
+  }
+  function renderFilter(){
+    const g = GROUPS.find(x => x.key === st.group) || GROUPS[0];
+    $('grpTabs').innerHTML = GROUPS.map(x => `<button type="button" class="tab ${x.key===g.key?'on':''}" data-grp="${x.key}">${x.label} ${x.ids.length}</button>`).join('');
+    const slotItems = itemsFor(st.active);
+    const cnt = (id) => slotItems.filter(i => i.skills.some(([s]) => s === id)).length;
+    $('sks').innerHTML = g.ids.map(id => `<button type="button" class="sk ${st.sel.has(id)?'on':''}" data-sk="${id}">${skZh(id)}<small>${cnt(id)}</small></button>`).join('');
+  }
+  function renderList(){
+    const cur = st.active === 'weapon' ? st.weapon : st.armor[st.active];
+    const match = (i) => i.skills.filter(([id]) => st.sel.has(id)).length;
+    const q = st.q.trim().toLowerCase();
+    let vis = itemsFor(st.active).filter(i => (!st.sel.size || match(i) > 0) && (!q || (i.name + ' ' + i.skills.map(([id]) => skZh(id)).join(' ')).toLowerCase().includes(q)));
+    if (st.sel.size) vis.sort((a,b) => match(b) - match(a));
+    $('listTitle').textContent = `可選${SLOT_ZH[st.active]}（${vis.length} 件）`;
+    $('list').innerHTML = vis.map(i => `<button type="button" class="item ${i.id===cur?'sel':''}" data-id="${i.id}">${i.name}<small>${i.pre}</small><small>${i.skills.map(([id,l]) => st.sel.has(id) ? `<mark>${skZh(id)} ${l}</mark>` : `${skZh(id)} ${l}`).join('、') || '無技能'}</small></button>`).join('')
+      || `<div class="empty">沒有帶這些技能的${SLOT_ZH[st.active]}。</div>`;
+  }
+
+  const DRIFT_OPTS = [['', '（空）'], ...D.drifts.map(d => [d.id, `${skZh(d.skill)} Lv${d.level}`]).sort((a,b) => a[1].localeCompare(b[1],'zh-Hant'))];
+  function renderDrifts(){
+    const n = O.SLOTS.reduce((t,s) => t + byId[st.armor[s]].driftSlots, 0);
+    st.drifts = [...st.drifts.slice(0, n), ...Array(Math.max(0, n - st.drifts.length)).fill('')];
+    $('driftBox').innerHTML = n ? st.drifts.map((v,i) => `<label>槽 ${i+1}<select data-i="${i}">${DRIFT_OPTS.map(([k,t]) => `<option value="${k}" ${k===v?'selected':''}>${t}</option>`).join('')}</select></label>`).join('') : '<p class="note">這套防具沒有漂流石槽。</p>';
+  }
+  function syncStyle(){
+    const w = weapon();
+    $('styleBox').hidden = !w.style;
+    const raw = !['fire','water','thunder','ice','dragon','poison','paralysis','sleep','blast'].includes(w.element);
+    [0,1,2].forEach(i => { const el = $('pick'+i).querySelector('option[value=element]'); el.disabled = raw; if (raw && $('pick'+i).value === 'element') $('pick'+i).value = 'attack'; });
+    const ss = (w.styleSkills || []).map(([id,l,min]) => `${skZh(id)} Lv${l}（風格 Lv${min} 解鎖）`).join('、');
+    $('styleNote').textContent = w.style ? `等級加成依武器系列逐級成長表計算。${ss ? '另解鎖：' + ss : ''}` : '';
+  }
+
+  function compute(){
+    const w = weapon(), mv = MOVES.find(m => m.id === $('move').value) || MOVES[0];
+    const lvl = styleLevel(), picks = [0,1,2].map(i => $('pick'+i).value);
+    const alloc = lvl ? { a: picks.filter(p => p === 'attack').length, e: picks.filter(p => p === 'element').length, f: picks.filter(p => p === 'affinity').length } : { a:0, e:0, f:0 };
+    let levels = O.addLevels(D, {}, O.weaponSkills(w, lvl));
+    O.SLOTS.forEach(s => { levels = O.addLevels(D, levels, byId[st.armor[s]].skills); });
+    st.drifts.filter(Boolean).forEach(id => { const d = D.drifts.find(x => x.id === id); if (d) levels = O.addLevels(D, levels, [[d.skill, d.level]]); });
+    const conds = new Set([...document.querySelectorAll('#conds input:checked')].map(x => x.value));
+    const ctx = { conditions: conds, move: { mv: mv.mv, phys: mv.phys, sp: !!mv.sp, charge: !!mv.charge, spPct: Number($('spPct').value) || 100 },
+      styleLevel: lvl, ferocityChance: Number($('ferocityChance').value) || 0, stackMode: 'add' };
+    const { inp, active } = O.toInput(D, w, alloc, levels, ctx);
+    const r = M.evaluate(D.config, $('monster').value, curState(), inp);
+    const on = new Set(active.map(([id]) => id));
+    $('summary').textContent = `${mName($('monster').value)}｜${mv.zh}（MV ${mv.mv}）${lvl ? `｜風格 ${picks.map(p => PICK_ZH[p]).join('')}` : ''}`;
+    $('nums').innerHTML = r.outcomes.map(o => `<div class="num"><small>${KIND_ZH[o.kind]||o.kind}${o.prob != null ? `（${(o.prob*100).toFixed(0)}%）` : ''}</small><b>${o.damage.toLocaleString()}</b></div>`).join('')
+      + `<div class="num main"><small>期望值</small><b>${r.expected.toFixed(0)}</b></div>`;
+    $('stats').textContent = `攻擊 ${r.base.ATK}｜屬性 ${r.base.ELE}｜會心率 ${r.rate}%｜傷害加成 +${inp.damageAddPct.toFixed(0)}%｜肉質 ${r.base.physPct}${r.base.weakPoint ? '（弱點）' : ''}`;
+    const rows = Object.entries(levels).sort((a,b) => (on.has(b[0]) - on.has(a[0])) || b[1] - a[1]);
+    $('skills').innerHTML = '<tr><th>技能</th><th>等級</th><th>狀態</th></tr>' + rows.map(([id,l]) => `<tr><td class="${on.has(id)?'':'off'}">${skZh(id)}</td><td>Lv${l}</td><td><span class="tag ${on.has(id)?'on':''}">${on.has(id) ? '發動中' : '未發動'}</span></td></tr>`).join('');
+  }
+  function renderAll(){ renderTiles(); renderFilter(); renderList(); compute(); save(); }
+
+  $('tiles').addEventListener('click', (e) => { const t = e.target.closest('[data-slot]'); if (!t) return; st.active = t.dataset.slot; renderAll(); });
+  $('chosen').addEventListener('click', (e) => { const c = e.target.closest('[data-unsel]'); if (!c) return; if (c.dataset.unsel === '*') st.sel.clear(); else st.sel.delete(c.dataset.unsel); renderAll(); });
+  $('grpTabs').addEventListener('click', (e) => { const t = e.target.closest('[data-grp]'); if (!t) return; st.group = t.dataset.grp; renderFilter(); save(); });
+  $('sks').addEventListener('click', (e) => { const t = e.target.closest('[data-sk]'); if (!t) return; const id = t.dataset.sk; if (st.sel.has(id)) st.sel.delete(id); else st.sel.add(id); renderAll(); });
+  $('q').addEventListener('input', () => { st.q = $('q').value; renderList(); });
+  $('list').addEventListener('click', (e) => {
+    const it = e.target.closest('[data-id]'); if (!it) return;
+    if (st.active === 'weapon') { st.weapon = it.dataset.id; syncStyle(); } else { st.armor[st.active] = it.dataset.id; renderDrifts(); }
+    renderAll();
+  });
+  $('driftBox').addEventListener('change', (e) => { const i = e.target.dataset.i; if (i != null) { st.drifts[i] = e.target.value; compute(); save(); } });
+  $('monster').addEventListener('change', () => { refreshParts(); compute(); save(); });
+  ['part','move','spPct','styleOn','pick0','pick1','pick2','ferocityChance'].forEach(id => { $(id).addEventListener('change', () => { renderTiles(); compute(); save(); }); $(id).addEventListener('input', () => { compute(); save(); }); });
+  $('conds').addEventListener('change', () => { compute(); save(); });
+  $('addCmp').addEventListener('click', () => MHNCompare.addWithToast(
+    { weapon: st.weapon, styleOn: $('styleOn').value, picks: [0,1,2].map(i => $('pick'+i).value), armor: { ...st.armor }, drifts: st.drifts.slice() },
+    { monster: $('monster').value, part: $('part').value, move: $('move').value, spPct: $('spPct').value, conds: [...document.querySelectorAll('#conds input:checked')].map(x => x.value), ferocityChance: $('ferocityChance').value }));
+
+  const KEY = 'mhn-loadout-v1';
+  function save(){
+    const s = { monster: $('monster').value, part: $('part').value, move: $('move').value, spPct: $('spPct').value, weapon: st.weapon,
+      styleOn: $('styleOn').value, picks: [0,1,2].map(i => $('pick'+i).value), armor: st.armor, drifts: st.drifts,
+      conds: [...document.querySelectorAll('#conds input:checked')].map(x => x.value), ferocityChance: $('ferocityChance').value,
+      filter: [...st.sel], group: st.group, active: st.active };
+    try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) {}
+  }
+  let s = null; try { s = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) {}
+  const setSel = (el, v) => { if (v != null && [...el.options].some(o => o.value === v)) el.value = v; };
+  if (s) {
+    setSel($('monster'), s.monster); refreshParts(s.part); setSel($('move'), s.move);
+    if (s.spPct) $('spPct').value = s.spPct;
+    if (wById[s.weapon]) st.weapon = s.weapon;
+    setSel($('styleOn'), s.styleOn); (s.picks || []).forEach((p,i) => setSel($('pick'+i), p));
+    O.SLOTS.forEach(sl => { if (s.armor && byId[s.armor[sl]]) st.armor[sl] = s.armor[sl]; });
+    st.drifts = s.drifts || [];
+    document.querySelectorAll('#conds input').forEach(x => { x.checked = (s.conds || []).includes(x.value); });
+    if (s.ferocityChance) $('ferocityChance').value = s.ferocityChance;
+    (s.filter || []).forEach(id => st.sel.add(id)); if (s.group) st.group = s.group; if (SLOTS.includes(s.active)) st.active = s.active;
+  } else { setSel($('monster'), 'w_em001_00'); refreshParts(); setSel($('move'), 'true_charged_slash_charge3_2'); }
+  MHNPicker.attach($('monster'), MHNPicker.monsterItems(D, sorted));
+  syncStyle(); renderDrifts(); renderAll();
+})();
+</script>
+</body>
+</html>

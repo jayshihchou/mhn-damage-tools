@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MHN 傷害計算器</title>
+<style>
+:root{--bg:#f7f7f5;--panel:#fff;--fg:#1d1d1b;--muted:#6b6b66;--line:#e2e1dc;--accent:#b4501e;--weak:#1f7a4d;--bad:#a33;}
+@media (prefers-color-scheme:dark){:root{--bg:#161614;--panel:#1f1f1c;--fg:#ecebe6;--muted:#9a9993;--line:#34332f;--accent:#e58a52;--weak:#5fcf95;--bad:#e77;}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,"Noto Sans TC","Microsoft JhengHei",sans-serif}
+header{padding:14px 16px;border-bottom:1px solid var(--line)}
+header h1{margin:0;font-size:18px}
+header p{margin:2px 0 0;color:var(--muted);font-size:12px}
+main{display:grid;grid-template-columns:340px 1fr;gap:16px;padding:16px;max-width:1400px;margin:auto}
+@media (max-width:860px){main{grid-template-columns:1fr}}
+section{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px}
+h2{font-size:13px;margin:0 0 8px;color:var(--accent);letter-spacing:.04em}
+fieldset{border:0;padding:0;margin:0 0 12px}
+label{display:grid;grid-template-columns:1fr 110px;align-items:center;gap:8px;margin:4px 0}
+label.chk{grid-template-columns:auto 1fr;justify-content:start}
+label.wide{grid-template-columns:auto 1fr}
+#styleBox label{grid-template-columns:1fr 150px}
+input,select{width:100%;padding:4px 6px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:4px;font:inherit}
+input[type=checkbox]{width:auto}
+details summary{cursor:pointer;color:var(--muted);margin:6px 0}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.row label{grid-template-columns:auto 1fr;flex:1;min-width:200px}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th,td{padding:5px 6px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child,th:nth-child(2),td:nth-child(2){text-align:left}
+th{font-weight:600;color:var(--muted);font-size:12px}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:var(--bg)}
+tr.sel{outline:2px solid var(--accent);outline-offset:-2px}
+.weak{color:var(--weak);font-weight:600}
+.zero{color:var(--muted)}
+.big{font-weight:700}
+.wrap{overflow-x:auto}
+pre{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:10px;white-space:pre-wrap;font:12px/1.5 ui-monospace,Consolas,monospace;margin:10px 0 0}
+.note{color:var(--muted);font-size:12px;margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <h1>MHN 傷害計算器 <a href="build.html" style="font-size:14px;color:var(--accent);margin-left:12px">最高傷害配裝 →</a></h1>
+  <p>輸入武器、技能與招式，計算打在每個部位的傷害。武器預設值目前只有大劍 10-5；動作值請自行輸入。</p>
+</header>
+<main>
+<section id="inputs">
+  <h2>武器</h2>
+  <fieldset>
+    <label class="wide">武器（10-5）<select id="preset"></select></label>
+    <div id="styleBox">
+      <label>風格強化等級<select id="styleLevel"></select></label>
+      <label>風格強化 Lv10<select class="style" data-i="0"></select></label>
+      <label>風格強化 Lv15<select class="style" data-i="1"></select></label>
+      <label>風格強化 Lv20<select class="style" data-i="2"></select></label>
+    </div>
+    <p class="note" id="presetNote"></p>
+    <label>武器種類<select id="weapon"></select></label>
+    <label>攻擊力<input id="attack" type="number" value="1500"></label>
+    <label>屬性<select id="element"></select></label>
+    <label>屬性值<input id="elementValue" type="number" value="500"></label>
+    <label>會心率 %<input id="affinity" type="number" value="0"></label>
+  </fieldset>
+  <h2>招式</h2>
+  <fieldset>
+    <label>動作值 MV<input id="mv" type="number" value="100"></label>
+    <label>攻擊屬性<select id="phys"><option value="cut">斬擊</option><option value="blunt">打擊</option><option value="ammo">彈</option><option value="blast">爆破（固定肉質）</option></select></label>
+    <label>多段衰減<input id="attenuation" type="number" step="0.01" value="1"></label>
+    <label class="chk"><input id="spMove" type="checkbox"> SP 技</label>
+    <label>SP 攻擊 %<input id="spAttackPercentage" type="number" value="110"></label>
+    <label class="chk"><input id="affectBySpirit" type="checkbox"> 太刀：受練氣影響</label>
+    <label>武器修正 %（笛/太刀/槍）<input id="correctionWithWeapon" type="number" value="0"></label>
+  </fieldset>
+  <h2>技能 / Buff</h2>
+  <fieldset>
+    <label>攻擊 +%<input id="attackMul" type="number" value="0"></label>
+    <label>攻擊 ×%<input id="attackMul2" type="number" value="0"></label>
+    <label>攻擊 +固定<input id="attackAdd" type="number" value="0"></label>
+    <label>屬性 +%<input id="elementMul" type="number" value="0"></label>
+    <label>屬性 ×%<input id="elementMul2" type="number" value="0"></label>
+    <label>屬性 +固定<input id="elementAdd" type="number" value="0"></label>
+    <label>弱點特效 會心 +%<input id="weaknessExploit" type="number" value="0"></label>
+    <label>超會心 +%<input id="critBoost" type="number" value="0"></label>
+    <label>傷害 +%<input id="damageAddPct" type="number" value="0"></label>
+    <label>其他乘算 ×<input id="extraMul" type="number" step="0.01" value="1"></label>
+    <details><summary>進階欄位</summary>
+      <label>會心時 攻擊 +%<input id="attackMulOnCrit" type="number" value="0"></label>
+      <label>會心時 攻擊 +固定<input id="attackAddOnCrit" type="number" value="0"></label>
+      <label>會心時 屬性 +%<input id="elementMulOnCrit" type="number" value="0"></label>
+      <label>負會心時 屬性 +%<input id="elementMulOnMinusCrit" type="number" value="0"></label>
+      <label>異常屬性 +%<input id="ailmentMul" type="number" value="0"></label>
+      <label>肉質下限 %<input id="overridePhysicalPercentage" type="number" value="0"></label>
+      <label>凶會心機率 %<input id="ferocityProbability" type="number" value="0"></label>
+      <label>凶會心倍率 %<input id="ferocityBoost" type="number" value="100"></label>
+    </details>
+  </fieldset>
+  <h2>怪物狀態</h2>
+  <fieldset>
+    <label class="chk"><input id="paralyzed" type="checkbox"> 麻痺中</label>
+    <label class="chk"><input id="outOfCritRange" type="checkbox"> 不在會心距離（弓/弩）</label>
+  </fieldset>
+</section>
+
+<section>
+  <div class="row">
+    <label>怪物<select id="monster"></select></label>
+    <label>狀態<select id="state"></select></label>
+  </div>
+  <div class="wrap"><table>
+    <thead><tr><th>部位</th><th>狀態</th><th>物理肉質</th><th>屬性肉質</th><th>弱點</th><th>會心率</th><th>無會心</th><th>會心</th><th>期望值</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table></div>
+  <pre id="detail"></pre>
+  <p class="note" id="ailment"></p>
+  <p class="note">
+    最終 = ceil( 武器修正 × MV × 衰減 × (⌊屬性肉質×屬性/100⌋ + 攻擊) / 100 × 物理肉質 / 100 × 麻痺 × (1+傷害%) × 會心倍率 × SP% × 其他 )<br>
+    攻擊／屬性 = ⌊(基礎值 × (1 + 加成%) + 固定加成) × 乘算%⌋。會心倍率 = (125 + 超會心)/100，負會心 0.75；物理肉質 ≥ 130 算弱點。
+  </p>
+</section>
+</main>
+<script src="data.js?v=2026111107"></script>
+<script src="damage.js?v=2026111107"></script>
+<script src="picker.js?v=2026111107"></script>
+<script>
+(function(){
+  const D = window.MHN_DATA, M = window.MHNDamage, $ = (id) => document.getElementById(id);
+  const ELEM_ZH = {none:'無',fire:'火',water:'水',thunder:'雷',ice:'冰',dragon:'龍',poison:'毒',paralysis:'麻痺',sleep:'睡眠',blast:'爆破'};
+  const WEAPON_ZH = {GREAT_SWORD:'大劍',SWORD_SHELD:'片手劍',DUAL_BLADES:'雙劍',LONG_SWORD:'太刀',HAMMER:'大錘',HUNTING_HORN:'狩獵笛',LANCE:'長槍',GUNLANCE:'銃槍',SWITCH_AXE:'斬擊斧',CHARGE_BLADE:'充能斧',INSECT_GLAIVE:'操蟲棍',BOW:'弓',HEAVY_BOWGUN:'重弩',LIGHT_BOWGUN:'輕弩'};
+  const fill = (sel, items) => { sel.innerHTML = items.map(([v,t]) => `<option value="${v}">${t}</option>`).join(''); };
+  fill($('weapon'), M.WEAPONS.map(w => [w, WEAPON_ZH[w]]));
+  fill($('element'), M.ELEMENTS.map(e => [e, ELEM_ZH[e]]));
+  const ids = Object.keys(D.monsters).sort((a,b) => a.replace(/^\w_/,'').localeCompare(b.replace(/^\w_/,'')) || a.localeCompare(b));
+  const weakList = (m) => Object.entries(D.monsters[m].weak).filter(([,v]) => v === 1).map(([k]) => ELEM_ZH[k]).join('');
+  const mName = (m) => MHNPicker.monsterName(D, m);
+  const STATE_ZH = {'(default)':'通常', Default:'通常', Broken:'破壞後', Rage:'憤怒', Iced:'冰凍', Hellfire:'獄炎', Sparking:'帶電', BubbleFoam:'泡沫'};
+  const sName = (s) => STATE_ZH[s] ? `${STATE_ZH[s]}` : s;
+  const named = ids.filter(m => D.monsters[m].zh).sort((a, b) => mName(a).localeCompare(mName(b), 'zh-Hant'));
+  const unnamed = ids.filter(m => !D.monsters[m].zh);
+  fill($('monster'), [...named, ...unnamed].map(m => [m, `${mName(m)}${D.monsters[m].zh ? '' : ''}${weakList(m) ? '（弱 ' + weakList(m) + '）' : ''}`]));
+
+  const NUM = ['attack','elementValue','affinity','mv','attenuation','spAttackPercentage','correctionWithWeapon','attackMul','attackMul2','attackAdd','elementMul','elementMul2','elementAdd','weaknessExploit','critBoost','damageAddPct','extraMul','attackMulOnCrit','attackAddOnCrit','elementMulOnCrit','elementMulOnMinusCrit','ailmentMul','overridePhysicalPercentage','ferocityProbability','ferocityBoost'];
+  const BOOL = ['spMove','affectBySpirit','paralyzed','outOfCritRange'];
+  const SEL = ['weapon','element','phys'];
+  const read = () => {
+    const o = {};
+    NUM.forEach(k => o[k] = Number($(k).value) || 0);
+    BOOL.forEach(k => o[k] = $(k).checked);
+    SEL.forEach(k => o[k] = $(k).value);
+    if (!$('extraMul').value) o.extraMul = 1;
+    if (!$('attenuation').value) o.attenuation = 1;
+    return o;
+  };
+
+  let selected = null;
+  function refreshStates(){
+    const m = D.monsters[$('monster').value];
+    const keys = [...new Set(m.parts.flatMap(p => p.states.map(s => s.s)))];
+    fill($('state'), [['*','全部狀態'], ...keys.map(k => [k, sName(k)])]);
+  }
+  function render(){
+    const inp = read(), mid = $('monster').value, m = D.monsters[mid], sf = $('state').value;
+    const rows = [];
+    m.parts.forEach((p, pi) => p.states.forEach((s, si) => {
+      if (sf !== '*' && s.s !== sf) return;
+      const r = M.evaluate(D.config, mid, s, inp);
+      const plus = r.outcomes.find(o => o.kind === 'plus'), minus = r.outcomes.find(o => o.kind === 'minus');
+      const crit = plus ? plus.damage : minus ? minus.damage : '—';
+      const key = pi + ':' + si;
+      rows.push(`<tr data-k="${key}" class="${selected === key ? 'sel' : ''}"><td>${p.zh || p.key}${p.head ? ' ★' : ''}</td><td>${sName(s.s)}</td>` +
+        `<td class="${r.base.weakPoint ? 'weak' : ''}">${r.base.physPct}</td><td class="${r.base.elemPct ? '' : 'zero'}">${r.base.elemPct}</td>` +
+        `<td>${r.base.weakPoint ? '<span class="weak">弱點</span>' : ''}</td><td>${r.rate}%</td>` +
+        `<td class="big">${r.base.damage}</td><td>${crit}</td><td>${r.expected.toFixed(1)}</td></tr>`);
+    }));
+    $('rows').innerHTML = rows.join('') || '<tr><td colspan="9">無資料</td></tr>';
+    renderDetail(inp, mid, m);
+    const a = M.ailmentBuildup(D, inp);
+    $('ailment').textContent = a ? `異常累積：每次觸發 ${a.value}（武器倍率 ${a.weaponPct}% × 屬性值，觸發機率 ${a.chance}%；尚未計入怪物耐性與耐性成長）` : '';
+  }
+  function renderDetail(inp, mid, m){
+    if (!selected) { $('detail').textContent = '點選部位列看計算明細。'; return; }
+    const [pi, si] = selected.split(':').map(Number), p = m.parts[pi], s = p && p.states[si];
+    if (!s) { $('detail').textContent = ''; return; }
+    const r = M.evaluate(D.config, mid, s, inp), b = r.base;
+    const lines = [
+      `${mName(mid)}（${mid}）/ ${p.zh || p.key} / ${sName(s.s)}`,
+      `攻擊 ATK = ${b.ATK}    屬性 ELE = ${b.ELE}    武器修正 = ${b.corr}`,
+      `物理肉質 = ${b.physPct}    屬性肉質 = ${b.elemPct}    弱點 = ${b.weakPoint}`,
+      `屬性項 ⌊${b.elemPct}×${b.ELE}/100⌋ = ${b.elemTerm}`,
+      `raw = ${b.corr} × ${inp.mv} × ${inp.attenuation} × (${b.elemTerm}+${b.ATK}) /100 × ${b.physPct}/100${inp.paralyzed ? ' × 1.10' : ''} = ${b.raw.toFixed(3)}`,
+      `會心率 = ${r.rate}%`,
+      ...r.outcomes.map(o => `  ${o.kind.padEnd(9)} 機率 ${(o.prob*100).toFixed(1).padStart(5)}%  → ${o.damage}`),
+      `期望值 = ${r.expected.toFixed(2)}`,
+    ];
+    $('detail').textContent = lines.join('\n');
+  }
+  $('rows').addEventListener('click', e => { const tr = e.target.closest('tr[data-k]'); if (tr) { selected = tr.dataset.k; render(); } });
+  const WEAPONS = D.weapons || [];
+  const STYLE_ZH = {none:'未選', attack:'攻擊', element:'屬性', affinity:'會心'};
+  fill($('preset'), [['', '手動輸入'], ...WEAPONS.map((w, i) => [String(i), `${WEAPON_ZH[w.type] || w.type}｜${w.zh || w.name}｜${ELEM_ZH[w.element]}${w.style ? '｜可風格強化' : ''}`])]);
+  const styleSel = [...document.querySelectorAll('select.style')];
+  const styleClass = (w) => ['fire','water','thunder','ice','dragon'].includes(w.element) ? 'elemental' : ['poison','paralysis','sleep','blast'].includes(w.element) ? 'status' : 'raw';
+  function applyPreset(){
+    const w = $('preset').value === '' ? null : WEAPONS[Number($('preset').value)];
+    const on = !!(w && w.style && D.style);
+    $('styleBox').style.display = on ? '' : 'none';
+    if (!w) { $('presetNote').textContent = WEAPONS.length ? '目前只有大劍 10-5 的武器資料。' : ''; return; }
+    const v = on ? D.style.values[styleClass(w)] : null;
+    if (on) styleSel.forEach(s => {
+      const keep = s.value;
+      fill(s, Object.keys(STYLE_ZH).filter(k => k === 'none' || v[k] > 0).map(k => [k, k === 'none' ? STYLE_ZH[k] : `${STYLE_ZH[k]} +${v[k]}${k === 'affinity' ? '%' : ''}`]));
+      if ([...s.options].some(o => o.value === keep)) s.value = keep;
+    });
+    const lvl = on ? Number($('styleLevel').value) : 0;
+    styleSel.forEach((s, i) => { s.disabled = lvl < D.style.levels[i]; });
+    const sb = M.styleBonus(D, w, lvl, on ? styleSel.map(s => s.value) : []);
+    $('weapon').value = w.type;
+    $('attack').value = w.attack + sb.attack;
+    $('element').value = w.element;
+    $('elementValue').value = w.elementValue + sb.element;
+    $('affinity').value = w.affinity + sb.affinity;
+    $('phys').value = 'cut';
+    $('presetNote').textContent = `${w.zh || w.name} 10-5：攻擊 ${w.attack}、${ELEM_ZH[w.element]} ${w.elementValue}、會心 ${w.affinity}%` +
+      (on ? `；風格強化 Lv${lvl}：等級加成 攻+${sb.levelAttack}／屬+${sb.levelElement}${w.stylePattern ? '' : '（此武器等級加成資料未知，僅計選項）'}，合計 攻擊 ${$('attack').value}、屬性 ${$('elementValue').value}、會心 ${$('affinity').value}%` : '') +
+      '。武器內建技能未計入。';
+  }
+  $('preset').addEventListener('change', () => { applyPreset(); render(); });
+  styleSel.forEach(s => s.addEventListener('change', () => { applyPreset(); render(); }));
+  fill($('styleLevel'), [...Array(21).keys()].reverse().map(n => [String(n), `Lv${n}`]));
+  $('styleLevel').addEventListener('change', () => { applyPreset(); render(); });
+  applyPreset();
+
+  $('monster').addEventListener('change', () => { selected = null; refreshStates(); render(); });
+  document.querySelectorAll('#inputs input,#inputs select:not(#preset):not(.style),#state').forEach(el => el.addEventListener('input', render));
+  $('monster').value = ids.includes('w_em001_00') ? 'w_em001_00' : ids[0];
+  refreshStates();
+
+  const KEY = 'mhn-calc-v1';
+  const setVal = (el, v) => { if (v == null || !el) return; if (el.type === 'checkbox') el.checked = !!v; else if (el.tagName !== 'SELECT' || [...el.options].some(o => o.value === String(v))) el.value = v; };
+  function saveState(){
+    const s = { monster: $('monster').value, state: $('state').value, preset: $('preset').value, styleLevel: $('styleLevel').value,
+      styles: styleSel.map(x => x.value), selected };
+    [...NUM, ...SEL].forEach(k => s[k] = $(k).value); BOOL.forEach(k => s[k] = $(k).checked);
+    try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) {}
+  }
+  (function loadState(){
+    let s; try { s = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { s = null; }
+    if (!s) return;
+    setVal($('monster'), s.monster); refreshStates(); setVal($('state'), s.state);
+    setVal($('preset'), s.preset); setVal($('styleLevel'), s.styleLevel);
+    applyPreset();
+    (s.styles || []).forEach((v, i) => setVal(styleSel[i], v));
+    if (s.preset) applyPreset();
+    [...NUM, ...SEL].forEach(k => setVal($(k), s[k])); BOOL.forEach(k => setVal($(k), s[k]));
+    selected = s.selected || null;
+  })();
+  MHNPicker.attach($('monster'), MHNPicker.monsterItems(D, [...named, ...unnamed]));
+  const wpi = MHNPicker.weaponItems(D, [{ value: '', label: '手動輸入', sub: '自己填攻擊／屬性／會心' }]);
+  wpi.items = wpi.items.map(it => it.top ? it : { ...it, value: String(WEAPONS.findIndex(w => w.id === it.value)) });
+  MHNPicker.attach($('preset'), wpi);
+  document.querySelector('main').addEventListener('change', () => setTimeout(saveState));
+  document.querySelector('main').addEventListener('input', () => setTimeout(saveState));
+  $('rows').addEventListener('click', () => setTimeout(saveState));
+  render();
+})();
+</script>
+</body>
+</html>

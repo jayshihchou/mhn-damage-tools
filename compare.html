@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MHN 配裝比較</title>
+<style>
+:root{--bg:#f7f7f5;--panel:#fff;--fg:#1d1d1b;--muted:#6b6b66;--line:#e2e1dc;--accent:#b4501e;--weak:#1f7a4d;--hi:#fff3e8;}
+@media (prefers-color-scheme:dark){:root{--bg:#161614;--panel:#1f1f1c;--fg:#ecebe6;--muted:#9a9993;--line:#34332f;--accent:#e58a52;--weak:#5fcf95;--hi:#2c2219;}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,"Noto Sans TC","Microsoft JhengHei",sans-serif}
+header{padding:10px 16px;display:flex;gap:16px;align-items:baseline;flex-wrap:wrap}
+header h1{margin:0;font-size:18px}
+header a{color:var(--accent)}
+main{padding:0 16px 24px;max-width:1500px;margin:auto;display:grid;gap:12px}
+section{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;min-width:0}
+h2{font-size:13px;margin:0 0 8px;color:var(--accent)}
+input,select,button{font:inherit}
+input,select{width:100%;padding:4px 6px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:4px}
+input[type=checkbox]{width:auto;margin:0 6px 0 0}
+.target{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+@media (max-width:900px){.target{grid-template-columns:1fr 1fr}}
+.target label{display:grid;gap:2px;font-size:12px;color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:2px 14px;margin-top:8px}
+.chips label{display:flex;align-items:center;font-size:12px}
+.note{color:var(--muted);font-size:12px;margin:6px 0 0}
+.wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px;min-width:600px;table-layout:fixed}
+td{overflow-wrap:anywhere}
+th,td{padding:5px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+thead th{position:sticky;top:0;background:var(--panel)}
+th.row{color:var(--muted);font-weight:500;white-space:nowrap;width:110px}
+td small{display:block;color:var(--muted);font-size:11px}
+td.num{font-variant-numeric:tabular-nums}
+td.best{color:var(--accent);font-weight:700}
+tr.sep th{color:var(--accent);font-size:12px;padding-top:12px}
+.colhead b{display:block}
+.colhead button{margin:4px 4px 0 0;padding:1px 8px;font-size:12px;border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--fg);cursor:pointer}
+.colhead button.rm{color:#c0392b}
+.off{color:var(--muted)}
+.lv{font-variant-numeric:tabular-nums}
+.empty{color:var(--muted);padding:20px;text-align:center}
+.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.bar button{padding:3px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);cursor:pointer}
+</style>
+</head>
+<body>
+<header>
+  <h1>MHN 配裝比較</h1>
+  <a href="build.html">← 最高傷害配裝</a>
+  <a href="loadout.html">配裝編輯</a>
+</header>
+<main>
+<section>
+  <h2>共同比較條件</h2>
+  <div class="bar"><label style="display:flex;align-items:center;font-size:13px"><input type="checkbox" id="own">各套改用自己加入時的條件</label><button type="button" id="clearAll">清空比較列</button></div>
+  <div id="targetBox">
+    <div class="target" style="margin-top:8px">
+      <label>怪物<select id="monster"></select></label>
+      <label>部位<select id="part"></select></label>
+      <label>招式<select id="move"></select></label>
+      <label>SP 攻擊 %<input id="spPct" type="number" value="110"></label>
+    </div>
+    <div class="chips" id="conds"></div>
+  </div>
+  <p class="note">所有配裝用同一組怪物、部位、招式和戰鬥狀況重新計算，數字才能直接比。每列最好的值以橘色標示。</p>
+</section>
+<section class="wrap" id="out"></section>
+</main>
+<script src="data.js?v=2026111107"></script>
+<script src="damage.js?v=2026111107"></script>
+<script src="optimizer.js?v=2026111107"></script>
+<script src="picker.js?v=2026111107"></script>
+<script src="compare-core.js?v=2026111107"></script>
+<script>
+(function(){
+  const D = window.MHN_DATA, O = window.MHNOptimizer, C = window.MHNCompare, $ = (id) => document.getElementById(id);
+  const ELEM_ZH = {none:'無',fire:'火',water:'水',thunder:'雷',ice:'冰',dragon:'龍',poison:'毒',paralysis:'麻痺',sleep:'睡眠',blast:'爆破'};
+  const SLOT_ZH = {head:'頭',chest:'胸',arms:'腕',waist:'腰',legs:'腳'};
+  const STATE_ZH = {'(default)':'通常', Default:'通常', Broken:'破壞後', Rage:'憤怒', Iced:'冰凍', Hellfire:'獄炎', Sparking:'帶電', BubbleFoam:'泡沫'};
+  const COND_ZH = {'risingTide2':'愈戰愈勇疊 2 層','forwardDodge':'向前迴避後','latentPower':'力量解放發動','afterRoar':'咆哮後','afterSpecialSkill':'SP 技能後','attackFromBehind':'從背後攻擊',
+    'consecutiveHits':'連續命中','groupHunt':'多人狩獵','hp.full':'體力全滿','hp.low':'體力低','monster.paralyzed':'怪物麻痺中',
+    'monster.partBroken':'部位已破壞','monster.poisoned':'怪物中毒','monster.sleeping':'怪物睡眠中（叫醒攻擊）','noEvade10s':'10 秒未迴避',
+    'perfectChargeRelease':'完美蓄力','perfectEvade':'完美迴避後','perfectGuard':'完美防禦後','player.bloodblight':'劫血狀態',
+    'player.statusAilment':'獵人異常狀態','recoveredFromStatus':'異常恢復後','revived':'倒地復活後','spGaugeFull':'SP 量表全滿',
+    'spGaugeNotFull':'SP 量表未滿','tookDamage':'受到傷害後','statusBuildupProc':'異常累積觸發時'};
+  const HIDDEN = new Set(['monster.weakPoint', 'chargedAttack', 'wakeUpHit']);
+  const PICK_ZH = {attack:'攻', element:'屬', affinity:'會'};
+  const skZh = (id) => (D.skills[id] && D.skills[id].zh) || (D.skillNames || {})[id] || id;
+  const fill = (sel, items) => { sel.innerHTML = items.map(([v,t]) => `<option value="${v}">${t}</option>`).join(''); };
+  const byId = Object.fromEntries(D.armor.map(a => [a.id, a]));
+
+  const ids = Object.keys(D.monsters).filter(m => D.monsters[m].parts.some(p => p.states.length));
+  const mName = (m) => MHNPicker.monsterName(D, m);
+  const sorted = [...ids.filter(m => D.monsters[m].zh).sort((a,b) => mName(a).localeCompare(mName(b),'zh-Hant')), ...ids.filter(m => !D.monsters[m].zh)];
+  fill($('monster'), sorted.map(m => [m, mName(m)]));
+  function refreshParts(keep){
+    const m = D.monsters[$('monster').value], items = [];
+    m.parts.forEach((p,pi) => p.states.forEach((s,si) => items.push([pi+':'+si, `${p.zh||p.key}${p.head?' ★':''}｜${STATE_ZH[s.s]||s.s}｜斬${s.p[0]}`])));
+    fill($('part'), items);
+    if (keep && items.some(i => i[0] === keep)) { $('part').value = keep; return; }
+    let best = items[0][0], bv = -1; m.parts.forEach((p,pi) => p.states.forEach((s,si) => { if (s.p[0] > bv) { bv = s.p[0]; best = pi+':'+si; } }));
+    $('part').value = best;
+  }
+  const MOVES = D.moves.GREAT_SWORD || [];
+  fill($('move'), MOVES.map(m => [m.id, `${m.zh}（MV ${m.mv}${m.sp ? '，SP' : ''}）`]));
+  $('conds').innerHTML = D.conditions.filter(c => !HIDDEN.has(c)).map(c => `<label><input type="checkbox" value="${c}">${COND_ZH[c]||c}</label>`).join('');
+  const target = () => ({ monster: $('monster').value, part: $('part').value, move: $('move').value, spPct: $('spPct').value,
+    conds: [...document.querySelectorAll('#conds input:checked')].map(x => x.value), ferocityChance: 100 });
+  const setSel = (el, v) => { if (v != null && [...el.options].some(o => o.value === v)) el.value = v; };
+  function applyTarget(t){
+    if (!t) { setSel($('monster'), 'w_em001_00'); refreshParts(); setSel($('move'), 'true_charged_slash_charge3_2'); return; }
+    setSel($('monster'), t.monster); refreshParts(t.part); setSel($('move'), t.move); if (t.spPct) $('spPct').value = t.spPct;
+    document.querySelectorAll('#conds input').forEach(x => { x.checked = (t.conds || []).includes(x.value); });
+  }
+  const TKEY = 'mhn-compare-target-v1';
+  let saved = null; try { saved = JSON.parse(localStorage.getItem(TKEY) || 'null'); } catch (e) {}
+  applyTarget(saved || (C.load()[0] || {}).target);
+  MHNPicker.attach($('monster'), MHNPicker.monsterItems(D, sorted));
+
+  function render(){
+    try { localStorage.setItem(TKEY, JSON.stringify(target())); } catch (e) {}
+    const own = $('own').checked; $('targetBox').style.opacity = own ? '.45' : '';
+    const list = C.load();
+    if (!list.length) { $('out').innerHTML = '<div class="empty">比較列是空的。到「最高傷害配裝」或「配裝編輯」按「加入比較」，最多 5 套。</div>'; return; }
+    const res = list.map(b => { try { return C.evalBuild(D, b, own && b.target ? b.target : target()); } catch (e) { return null; } });
+    const cols = list.map((b, i) => ({ b, e: res[i] }));
+    const oc = (e, k) => { const o = e && e.r.outcomes.find(x => x.kind === k); return o ? o.damage : null; };
+    const row = (label, vals, opt = {}) => {
+      const nums = vals.map(v => typeof v === 'number' ? v : null).filter(v => v != null);
+      const best = nums.length > 1 && new Set(nums).size > 1 ? (opt.low ? Math.min(...nums) : Math.max(...nums)) : null;
+      return `<tr><th class="row">${label}</th>${vals.map(v => {
+        if (v == null) return '<td class="off">—</td>';
+        if (typeof v === 'number') return `<td class="num ${best != null && v === best && opt.mark !== false ? 'best' : ''}">${opt.fmt ? opt.fmt(v) : v.toLocaleString()}</td>`;
+        return `<td>${v}</td>`;
+      }).join('')}</tr>`;
+    };
+    const sep = (t) => `<tr class="sep"><th colspan="${cols.length + 1}">${t}</th></tr>`;
+    const gear = (a) => a ? `${a.zh||a.name}<small>漂流 ${a.driftSlots}</small><small>${a.skills.map(([id,l]) => `${skZh(id)} ${l}`).join('<br>') || '無技能'}</small>` : '—';
+    let h = `<table><thead><tr><th class="row"></th>${cols.map(({ b, e }, i) => `<th class="colhead"><b>#${i+1} ${e ? (e.w.zh||e.w.name) : '（資料錯誤）'}</b><small>${e && e.lvl ? '風格 ' + e.picks.map(p => PICK_ZH[p]).join('') : '無風格強化'}</small><button type="button" data-edit="${i}">編輯</button><button type="button" class="rm" data-rm="${i}">移除</button></th>`).join('')}</tr></thead><tbody>`;
+    h += sep('傷害');
+    h += row('期望值', cols.map(({ e }) => e ? Math.round(e.r.expected) : null));
+    h += row('無會心', cols.map(({ e }) => oc(e, 'none')));
+    h += row('會心', cols.map(({ e }) => oc(e, 'plus')));
+    h += row('凶會心', cols.map(({ e }) => oc(e, 'ferocity')));
+    h += row('負會心', cols.map(({ e }) => oc(e, 'minus')), { mark: false });
+    h += sep('數值');
+    h += row('攻擊', cols.map(({ e }) => e ? e.r.base.ATK : null));
+    h += row('屬性', cols.map(({ e }) => e ? e.r.base.ELE : null));
+    h += row('會心率', cols.map(({ e }) => e ? e.r.rate : null), { fmt: (v) => v + '%' });
+    h += row('傷害加成', cols.map(({ e }) => e ? Math.round(e.inp.damageAddPct) : null), { fmt: (v) => '+' + v + '%' });
+    if (own) h += row('條件', cols.map(({ b }) => b.target ? `${mName(b.target.monster)}<small>${(b.target.conds || []).map(c => COND_ZH[c]||c).join('、') || '無戰鬥狀況'}</small>` : '—'));
+    h += sep('裝備');
+    h += row('武器', cols.map(({ e }) => e ? `${e.w.zh||e.w.name}<small>${ELEM_ZH[e.w.element]} ${e.w.elementValue||''}｜攻 ${e.w.attack}</small><small>${O.weaponSkills(e.w, e.lvl).map(([id,l]) => `${skZh(id)} ${l}`).join('<br>') || '無技能'}</small>` : null));
+    O.SLOTS.forEach(s => { h += row(SLOT_ZH[s], cols.map(({ b }) => gear(byId[(b.armor || {})[s]]))); });
+    h += row('漂流石', cols.map(({ b }) => { const ds = (b.drifts || []).filter(Boolean).map(id => { const d = D.drifts.find(x => x.id === id); return d ? skZh(d.skill) : id; }); return ds.length ? Object.entries(ds.reduce((a,x)=>(a[x]=(a[x]||0)+1,a),{})).map(([k,v]) => `${k}×${v}`).join('、') : '無'; }));
+    const allSk = [...new Set(cols.flatMap(({ e }) => e ? Object.keys(e.levels) : []))];
+    const activeAny = (id) => cols.some(({ e }) => e && e.active.some(([x]) => x === id));
+    allSk.sort((a, b) => activeAny(b) - activeAny(a) || skZh(a).localeCompare(skZh(b), 'zh-Hant'));
+    h += sep('技能（灰色＝目前條件下未發動）');
+    allSk.forEach(id => {
+      h += `<tr><th class="row ${activeAny(id) ? '' : 'off'}">${skZh(id)}</th>${cols.map(({ e }) => {
+        const l = e && e.levels[id]; if (!l) return '<td class="off">—</td>';
+        const on = e.active.some(([x]) => x === id);
+        return `<td class="lv ${on ? '' : 'off'}">Lv${l}</td>`;
+      }).join('')}</tr>`;
+    });
+    $('out').innerHTML = h + '</tbody></table>';
+  }
+  $('out').addEventListener('click', (e) => {
+    const rm = e.target.closest('[data-rm]'); if (rm) { C.remove(Number(rm.dataset.rm)); render(); return; }
+    const ed = e.target.closest('[data-edit]'); if (ed) {
+      const b = C.load()[Number(ed.dataset.edit)], t = $('own').checked && b.target ? b.target : target();
+      const s = { ...t, weapon: b.weapon, styleOn: b.styleOn, picks: b.picks, armor: b.armor, drifts: b.drifts };
+      try { localStorage.setItem('mhn-loadout-v1', JSON.stringify(s)); } catch (err) {}
+      location.href = 'loadout.html';
+    }
+  });
+  $('clearAll').addEventListener('click', () => { C.clear(); render(); });
+  $('monster').addEventListener('change', () => { refreshParts(); render(); });
+  ['part','move','spPct','own'].forEach(id => $(id).addEventListener('change', render));
+  $('spPct').addEventListener('input', render);
+  $('conds').addEventListener('change', render);
+  window.addEventListener('storage', (e) => { if (e.key === C.KEY) render(); });
+  render();
+})();
+</script>
+</body>
+</html>
