@@ -60,6 +60,20 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
 .skills{font-size:12px;color:var(--muted);margin-top:4px}
 .err{color:#c33;white-space:pre-wrap}
 .presets{display:flex;gap:8px;margin:0 0 6px}
+.mode{display:flex;gap:0;margin:0 0 8px;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.mode label{display:flex;flex:1;margin:0;padding:6px 8px;cursor:pointer;font-size:13px;justify-content:center}
+.mode label:has(input:checked){background:var(--accent);color:#fff}
+.mode input{display:none}
+.chips label .up{width:52px;margin-left:auto;padding:1px 4px;font-size:12px}
+.chips label .up[hidden]{display:none}
+.chips.dps{grid-template-columns:1fr}
+.req{display:flex;gap:6px;align-items:center}
+.req select{flex:1}
+.req select.lv{flex:0 0 70px}
+.req button,.reqs button{padding:3px 10px;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:4px;cursor:pointer}
+.reqs{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}
+.reqs span{display:inline-flex;gap:4px;align-items:center;border:1px solid var(--accent);border-radius:12px;padding:1px 4px 1px 10px;font-size:12px}
+.reqs span button{border:0;padding:0 6px;background:none;color:var(--muted)}
 .presets button{padding:3px 10px;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:4px;cursor:pointer}
 </style>
 </head>
@@ -100,10 +114,17 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
   <div class="metric" id="metric"></div>
   <p class="note" id="metricNote"></p>
 
+  <h2>必帶技能</h2>
+  <div class="req"><select id="reqSkill"></select><select id="reqLv" class="lv"></select><button type="button" id="reqAdd">加入</button></div>
+  <div class="reqs" id="reqs"></div>
+  <p class="note">只列出達到這些等級的配裝。適合放傷害算不出來、但你想帶的技能（例如集中、鎖定），或想看看帶了某個條件技能後最好的配法。</p>
+
   <h2>戰鬥狀況（技能發動條件）</h2>
+  <div class="mode"><label><input type="radio" name="mode" value="max" checked>最高傷害（條件全發動）</label><label><input type="radio" name="mode" value="dps">平均傷害（依發動率）</label></div>
+  <p class="note" id="modeNote"></p>
   <div class="presets"><button type="button" id="condAll">理論最大（全選）</button><button type="button" id="condNone">清除</button></div>
   <div class="chips" id="conds"></div>
-  <p class="note">互斥狀況（體力全滿／體力低、完美迴避後或向前迴避後／10 秒未迴避、麻痺／睡眠、SP 全滿／未滿）同時勾選時，會分開計算再取最高，不會同時發動。全選時計算約需 10–20 秒。</p>
+  <p class="note" id="exclNote">互斥狀況（體力全滿／體力低、完美迴避後或向前迴避後／10 秒未迴避、麻痺／睡眠、SP 全滿／未滿）同時勾選時，會分開計算再取最高，不會同時發動。全選時計算約需 10–20 秒。</p>
 
   <h2>參數</h2>
   <label>凶會心轉換機率 %<input id="ferocityChance" type="number" value="100"></label>
@@ -121,11 +142,11 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
   <div id="out"></div>
 </section>
 </main>
-<script src="data.js?v=2026111202"></script>
-<script src="damage.js?v=2026111202"></script>
-<script src="optimizer.js?v=2026111202"></script>
-<script src="picker.js?v=2026111202"></script>
-<script src="compare-core.js?v=2026111202"></script>
+<script src="data.js?v=2026111203"></script>
+<script src="damage.js?v=2026111203"></script>
+<script src="optimizer.js?v=2026111203"></script>
+<script src="picker.js?v=2026111203"></script>
+<script src="compare-core.js?v=2026111203"></script>
 <script>
 (function(){
   const D = window.MHN_DATA, O = window.MHNOptimizer, $ = (id) => document.getElementById(id);
@@ -172,7 +193,35 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
   $('metric').innerHTML = O.METRICS.map(k => `<label class="${avail[k]?'':'off'}"><input type="radio" name="metric" value="${k}" ${k==='expected'?'checked':''} ${avail[k]?'':'disabled'}>${METRIC_ZH[k]}${avail[k]?'':'（目前裝備無法達成）'}</label>`).join('');
   $('metricNote').textContent = '只考慮能產生該結果的配裝：會心一刀需會心率 > 0；凶會心一刀需帶「凶會心」且會心率 < 0。';
 
-  $('conds').innerHTML = D.conditions.filter(c => !HIDDEN.has(c)).map(c => `<label><input type="checkbox" value="${c}">${COND_ZH[c]||c}</label>`).join('');
+  const UP_DEF = {'hp.full':70,'hp.low':10,'consecutiveHits':60,'monster.partBroken':50,'risingTide2':50,'afterRoar':15,'afterSpecialSkill':20,'attackFromBehind':30,
+    'perfectEvade':20,'forwardDodge':20,'noEvade10s':40,'perfectChargeRelease':70,'spGaugeFull':20,'spGaugeNotFull':80,'monster.paralyzed':5,'monster.sleeping':3,
+    'monster.poisoned':30,'groupHunt':0,'latentPower':30,'tookDamage':20,'perfectGuard':10,'revived':0,'statusBuildupProc':10,'player.statusAilment':30,'recoveredFromStatus':20,'player.bloodblight':30};
+  $('conds').innerHTML = D.conditions.filter(c => !HIDDEN.has(c)).map(c => `<label><input type="checkbox" value="${c}">${COND_ZH[c]||c}<input class="up" type="number" min="0" max="100" step="5" data-c="${c}" value="${UP_DEF[c] ?? 50}" title="發動率 %" hidden></label>`).join('');
+  const mode = () => (document.querySelector('input[name=mode]:checked') || {}).value || 'max';
+  const syncMode = () => {
+    const dps = mode() === 'dps';
+    document.querySelectorAll('#conds .up').forEach(x => x.hidden = !dps);
+    $('conds').classList.toggle('dps', dps);
+    $('exclNote').hidden = dps;
+    $('condAll').textContent = dps ? '全選' : '理論最大（全選）';
+    $('modeNote').textContent = dps
+      ? '勾選的狀況依右邊的發動率（佔你出手次數的 %）加權平均，排序用平均傷害。互斥狀況的發動率合計不要超過 100%。用來比較「條件技能」實際值不值得帶。沒有招式時間資料，集中等攻速類技能不計。'
+      : '勾選的狀況視為一直發動，算單發最高傷害。';
+    $('go').textContent = dps ? '計算平均傷害最高的配裝' : '計算最高傷害配裝';
+  };
+  document.querySelectorAll('input[name=mode]').forEach(x => x.addEventListener('change', syncMode));
+
+  const skillZh = (id) => (D.skills[id] && D.skills[id].zh) || (D.skillNames || {})[id] || id;
+  const gearIds = new Set([...D.armor.flatMap(a => a.skills.map(x => x[0])), ...D.drifts.map(d => d.skill), ...D.weapons.flatMap(w => [...(w.skills||[]), ...(w.styleSkills||[])].map(x => x[0]))]);
+  const reqList = [...gearIds].sort((a, b) => skillZh(a).localeCompare(skillZh(b), 'zh-Hant'));
+  fill($('reqSkill'), reqList.map(id => [id, skillZh(id) + (D.skills[id] ? '' : '（不計傷害）')]));
+  const maxLv = (id) => D.skills[id] ? D.skills[id].max : 5;
+  const syncReqLv = () => fill($('reqLv'), Array.from({ length: maxLv($('reqSkill').value) }, (_, i) => [i + 1, 'Lv' + (i + 1)]));
+  $('reqSkill').addEventListener('change', syncReqLv); syncReqLv();
+  let required = {};
+  const renderReqs = () => { $('reqs').innerHTML = Object.entries(required).map(([id, l]) => `<span>${skillZh(id)} Lv${l}<button type="button" data-r="${id}" title="移除">×</button></span>`).join(''); };
+  $('reqAdd').addEventListener('click', () => { required[$('reqSkill').value] = Number($('reqLv').value); renderReqs(); saveState(); });
+  $('reqs').addEventListener('click', (e) => { const b = e.target.closest('button[data-r]'); if (!b) return; delete required[b.dataset.r]; renderReqs(); saveState(); });
 
   const syncOv = () => {
     const w = D.weapons.find(x => x.id === $('weaponPick').value);
@@ -180,8 +229,8 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
     if (w) { $('ovAtk').value = w.attack; $('ovEle').value = w.elementValue; $('ovAff').value = w.affinity; $('ovOn').checked = false; }
   };
   $('weaponPick').addEventListener('change', syncOv);
-  $('condAll').addEventListener('click', () => document.querySelectorAll('#conds input:not(:disabled)').forEach(x => x.checked = true));
-  $('condNone').addEventListener('click', () => document.querySelectorAll('#conds input').forEach(x => x.checked = false));
+  $('condAll').addEventListener('click', () => document.querySelectorAll('#conds input[type=checkbox]:not(:disabled)').forEach(x => x.checked = true));
+  $('condNone').addEventListener('click', () => document.querySelectorAll('#conds input[type=checkbox]').forEach(x => x.checked = false));
   const MOVES = (D.moves && D.moves.GREAT_SWORD) || [];
   fill($('move'), [...MOVES.map(m => [m.id, `${m.zh}（MV ${m.mv}${m.sp ? '，SP' : ''}${m.phys === 'blunt' ? '，打擊' : ''}）`]), ['custom', '自訂']]);
   const moveSync = () => {
@@ -206,7 +255,9 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
   function saveState(){
     const s = {}; FIELDS.forEach(id => s[id] = val($(id)));
     s.metric = (document.querySelector('input[name=metric]:checked') || {}).value;
-    s.conds = [...document.querySelectorAll('#conds input:checked')].map(x => x.value);
+    s.conds = [...document.querySelectorAll('#conds input[type=checkbox]:checked')].map(x => x.value);
+    s.mode = mode(); s.required = required;
+    s.uptime = Object.fromEntries([...document.querySelectorAll('#conds .up')].map(x => [x.dataset.c, Number(x.value)]));
     try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) {}
   }
   function loadState(){
@@ -219,9 +270,12 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
     setVal($('weaponPick'), s.weaponPick); syncOv();
     ['stylePick','ovOn','ovAtk','ovEle','ovAff','ferocityChance','beam'].forEach(id => setVal($(id), s[id]));
     const m = document.querySelector(`input[name=metric][value="${s.metric}"]:not(:disabled)`); if (m) m.checked = true;
-    document.querySelectorAll('#conds input').forEach(x => { x.checked = !x.disabled && (s.conds || []).includes(x.value); });
+    document.querySelectorAll('#conds input[type=checkbox]').forEach(x => { x.checked = !x.disabled && (s.conds || []).includes(x.value); });
+    document.querySelectorAll('#conds .up').forEach(x => { if (s.uptime && s.uptime[x.dataset.c] != null) x.value = s.uptime[x.dataset.c]; });
+    const md = document.querySelector(`input[name=mode][value="${s.mode}"]`); if (md) md.checked = true;
+    required = Object.fromEntries(Object.entries(s.required || {}).filter(([id]) => gearIds.has(id)));
   }
-  loadState();
+  loadState(); syncMode(); renderReqs();
   const mp = MHNPicker.monsterItems(D, sorted);
   const monsterPicker = MHNPicker.attach($('monster'), mp);
   const wp = MHNPicker.weaponItems(D, [{ value: '*', label: '全部大劍（自動選）', sub: '53 把一起比較' }]);
@@ -235,14 +289,16 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
   $('go').addEventListener('click', () => {
     if (worker) worker.terminate();
     const metric = document.querySelector('input[name=metric]:checked').value;
-    const conds = [...document.querySelectorAll('#conds input:checked')].map(x => x.value);
+    const conds = [...document.querySelectorAll('#conds input[type=checkbox]:checked')].map(x => x.value);
+    const dps = mode() === 'dps';
+    const uptime = dps ? Object.fromEntries(conds.map(c => [c, Math.min(100, Math.max(0, Number(document.querySelector(`#conds .up[data-c="${c}"]`).value) || 0))])) : null;
     const mv0 = MOVES.find(x => x.id === $('move').value);
     const sp = !!(mv0 || {}).sp, charge = mv0 ? !!mv0.charge : true;
     const wp = $('weaponPick').value, sp2 = $('stylePick').value;
     const ctx = {
       monsterId: $('monster').value, state: curState(), conditions: conds,
       move: { mv: Number($('mv').value) || 0, phys: $('phys').value, sp, charge, spPct: Number($('spPct').value) || 100 },
-      metric, ferocityChance: Number($('ferocityChance').value) || 0, stackMode: $('stackMode').value,
+      metric, uptime, required: { ...required }, ferocityChance: Number($('ferocityChance').value) || 0, stackMode: $('stackMode').value,
       weaponIds: wp === '*' ? null : [wp],
       weaponOverride: wp !== '*' && $('ovOn').checked ? { attack: Number($('ovAtk').value) || 0, elementValue: Number($('ovEle').value) || 0, affinity: Number($('ovAff').value) || 0 } : null,
       styleLevel: sp2 === 'none' ? 0 : 20,
@@ -250,7 +306,7 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
     };
     $('go').disabled = true; $('prog').hidden = false; $('prog').value = 0;
     $('summary').textContent = '計算中…'; $('out').innerHTML = '';
-    worker = new Worker('optimizer-worker.js?v=2026111202');
+    worker = new Worker('optimizer-worker.js?v=2026111203');
     worker.onmessage = (ev) => {
       const m = ev.data;
       if (m.type === 'progress') { $('prog').max = m.n; $('prog').value = m.i; return; }
@@ -266,12 +322,14 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
     return list.length ? `<small class="gs">${list.map(([id, l]) => `${(D.skills[id] && D.skills[id].zh) || (D.skillNames || {})[id] || id} Lv${l}${tag(id)}`).join('<br>')}</small>` : '';
   }
   function render(m, ctx, metric){
-    if (!m.results.length) { $('summary').textContent = `沒有配裝能達成「${METRIC_ZH[metric]}」。`; return; }
-    const cond = ctx.conditions.map(c => COND_ZH[c]||c).join('、') || '無';
-    $('summary').textContent = `${mName(ctx.monsterId)}｜MV ${ctx.move.mv}${ctx.move.sp?'（SP）':''}｜條件：${cond}｜排序：${METRIC_ZH[metric]}｜${m.profiles > 1 ? `互斥條件拆成 ${m.profiles} 組｜` : ''}評估 ${m.evals.toLocaleString()} 次，${(m.ms/1000).toFixed(1)} 秒`;
+    const reqTxt = Object.entries(ctx.required || {}).map(([id, l]) => `${skillZh(id)} Lv${l}`).join('、');
+    if (!m.results.length) { $('summary').textContent = reqTxt ? `沒有配裝能同時帶到：${reqTxt}（也可能此條件下「${METRIC_ZH[metric]}」無法達成）。` : `沒有配裝能達成「${METRIC_ZH[metric]}」。`; return; }
+    const cond = ctx.uptime ? (Object.entries(ctx.uptime).filter(([, v]) => v > 0).map(([c, v]) => `${COND_ZH[c]||c} ${v}%`).join('、') || '無')
+      : (ctx.conditions.map(c => COND_ZH[c]||c).join('、') || '無');
+    $('summary').textContent = `${mName(ctx.monsterId)}｜MV ${ctx.move.mv}${ctx.move.sp?'（SP）':''}｜${ctx.uptime ? '發動率' : '條件'}：${cond}${reqTxt ? `｜必帶：${reqTxt}` : ''}｜排序：${ctx.uptime ? '平均 ' : ''}${METRIC_ZH[metric]}｜${m.profiles > 1 ? `互斥條件拆成 ${m.profiles} 組｜` : ''}評估 ${m.evals.toLocaleString()} 次，${(m.ms/1000).toFixed(1)} 秒`;
     const byId = Object.fromEntries(D.armor.map(a => [a.id, a]));
     const drById = Object.fromEntries(D.drifts.map(d => [d.id, d]));
-    const sig = (r) => r.outcomes.map(o => o.kind + o.damage).join('|') + '|' + r.expected.toFixed(1);
+    const sig = (r) => r.outcomes.map(o => o.kind + o.damage).join('|') + '|' + r.expected.toFixed(1) + '|' + r.score.toFixed(2);
     const groups = [];
     m.results.forEach((r, i) => { const g = groups.find(x => x.sig === sig(r)); if (g) g.alts.push(i); else groups.push({ sig: sig(r), main: i, alts: [] }); });
     const contrib = (a, id) => a.skills.filter(([s]) => s === id).reduce((t, [, l]) => t + l, 0);
@@ -295,7 +353,7 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
       const o = (k) => (r.outcomes.find(x => x.kind === k) || {});
       const pct = (k) => o(k).prob != null ? ` <small>${(o(k).prob*100).toFixed(0)}%</small>` : '';
       const val = (k) => o(k).damage != null ? o(k).damage.toLocaleString() : '—';
-      const cls = (k) => k === metric ? 'sel' : '';
+      const cls = (k) => !ctx.uptime && k === metric ? 'sel' : '';
       const styleTxt = r.style ? ` 風格 ${r.style.replace(/A/g,'攻').replace(/E/g,'屬').replace(/F/g,'會')}` : '';
       const drifts = r.drifts.map(id => { const d = drById[id]; return (D.skills[d.skill].zh || d.skill); });
       const driftTxt = drifts.length ? Object.entries(drifts.reduce((a,x)=>(a[x]=(a[x]||0)+1,a),{})).map(([k,v]) => `${k}×${v}`).join('、') : '無';
@@ -305,14 +363,16 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
       const sw = (s) => { const x = swaps(r, s); return x.length ? `<small class="swap">可替換：${x.map(a => a.zh||a.name).join('、')}</small>` : ''; };
       return `<div class="card ${gi===0?'top':''} ${g.alts.length?'has-alts':''}"><div class="main">
         <h3><span class="rank">#${gi+1}</span>${w.zh||w.name}<small>（${ELEM_ZH[w.element]}${styleTxt}）</small>
-          <span class="score">${metric==='expected' ? r.expected.toFixed(0) : r.score.toLocaleString()}</span></h3>
+          <span class="score">${ctx.uptime ? `<small>平均</small> ${Math.round(r.score).toLocaleString()}` : metric==='expected' ? r.expected.toFixed(0) : r.score.toLocaleString()}</span></h3>
         <div class="grid"><div class="slot"><b>武器</b>${w.zh||w.name}${gearSkills(O.weaponSkills(w, r.style ? ctx.styleLevel : 0), w.style && r.style ? (w.styleSkills||[]) : [])}</div>${O.SLOTS.map(s => `<div class="slot"><b>${SLOT_ZH[s]}（漂流 ${byId[r.armor[s]].driftSlots}）</b>${byId[r.armor[s]].zh||byId[r.armor[s]].name}${gearSkills(byId[r.armor[s]].skills)}${driftLine(dbs[s])}${sw(s)}</div>`).join('')}</div>
+        ${ctx.uptime ? `<div class="skills">下面數字是所有勾選狀況都發動時（互斥的取發動率高的）</div>` : ''}
         <div class="nums">
           <span class="${cls('none')}">無會心 ${val('none')}${pct('none')}</span>
           <span class="${cls('crit')}">會心 ${val('plus')}${pct('plus')}</span>
           <span class="${cls('ferocity')}">凶會心 ${val('ferocity')}${pct('ferocity')}</span>
           <span>負會心 ${val('minus')}${pct('minus')}</span>
-          <span class="${cls('expected')}">期望 ${r.expected.toFixed(0)}</span>
+          <span class="${ctx.uptime ? '' : cls('expected')}">期望 ${r.expected.toFixed(0)}</span>
+          ${ctx.uptime ? `<span class="sel">平均（依發動率）${r.score.toFixed(0)}</span>` : ''}
         </div>
         <div class="skills">攻擊 ${r.base.ATK}｜屬性 ${r.base.ELE}｜會心率 ${r.rate}%｜傷害加成 +${inp.damageAddPct.toFixed(0)}%${inp.extraMul !== 1 ? ` ×${inp.extraMul.toFixed(2)}` : ''}｜肉質 ${r.base.physPct}${r.base.weakPoint?'（弱點）':''}</div>
         <div class="skills">漂流石合計：${driftTxt}</div>

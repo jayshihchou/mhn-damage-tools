@@ -33,11 +33,11 @@
     return [...(w.skills || []), ...extra];
   }
 
-  function addLevels(D, base, grants) {
+  function addLevels(D, base, grants, keep) {
     const n = { ...base };
     for (const [id, lv] of grants) {
-      const s = D.skills[id]; if (!s) continue;
-      n[id] = Math.min(s.max, (n[id] || 0) + lv);
+      const s = D.skills[id]; if (!s && !(keep && keep.has(id))) continue;
+      n[id] = Math.min(s ? s.max : 99, (n[id] || 0) + lv);
     }
     return n;
   }
@@ -126,7 +126,7 @@
   function prunedArmor(D, rel) {
     const by = {};
     for (const slot of SLOTS) {
-      const proj = D.armor.filter((a) => a.slot === slot).map((a) => ({ a, lv: addLevels(D, {}, a.skills.filter(([id]) => rel.has(id))) }));
+      const proj = D.armor.filter((a) => a.slot === slot).map((a) => ({ a, lv: addLevels(D, {}, a.skills.filter(([id]) => rel.has(id)), rel) }));
       const uniq = new Map();
       for (const x of proj) { const k = x.a.driftSlots + '#' + levelSig(x.lv); if (!uniq.has(k)) uniq.set(k, x); }
       const u = [...uniq.values()];
@@ -167,7 +167,62 @@
     return out;
   }
 
+  const AUTO_CONDS = new Set(['monster.weakPoint', 'chargedAttack']);
+  const condKey = (c) => (c === 'wakeUpHit' ? 'monster.sleeping' : c);
+  function uptimeConds(D, levels, uptime) {
+    const out = new Set();
+    for (const [id, lv] of Object.entries(levels)) {
+      const s = D.skills[id]; if (!s || !lv) continue;
+      const e = s.levels[String(Math.min(lv, s.max))] || {};
+      for (const c of [...(e.requires || []), ...(e.conflicts || [])]) {
+        const k = condKey(c);
+        if (!AUTO_CONDS.has(k) && (uptime[k] || 0) > 0) out.add(k);
+      }
+    }
+    if ((uptime['monster.paralyzed'] || 0) > 0) out.add('monster.paralyzed');
+    return out;
+  }
+  const exclusiveWith = (a, b) => a !== b && EXCLUSIVE.some((g) => g.includes(a) && g.includes(b));
+  function uptimeScenarios(conds, uptime) {
+    const P = (c) => Math.min(1, Math.max(0, (uptime[c] || 0) / 100));
+    const left = [...conds], comps = [];
+    while (left.length) {
+      const comp = [left.shift()];
+      for (let i = 0; i < comp.length; i++) for (let j = left.length - 1; j >= 0; j--) if (exclusiveWith(comp[i], left[j])) comp.push(left.splice(j, 1)[0]);
+      comps.push(comp);
+    }
+    const indep = (list, scale) => {
+      let o = [{ conds: [], p: 1 }];
+      for (const c of list) { const q = Math.min(1, P(c) * scale); o = o.flatMap((x) => [{ conds: [...x.conds, c], p: x.p * q }, { conds: x.conds, p: x.p * (1 - q) }]); }
+      return o;
+    };
+    let sc = [{ conds: [], p: 1 }];
+    for (const comp of comps) {
+      let opts;
+      if (comp.length === 1) opts = indep(comp, 1);
+      else {
+        const hub = comp.find((h) => comp.every((c) => c === h || exclusiveWith(h, c))) || comp[0];
+        const ph = P(hub), free = 1 - ph;
+        opts = [{ conds: [hub], p: ph }, ...(free > 1e-9 ? indep(comp.filter((c) => c !== hub), 1 / free).map((x) => ({ conds: x.conds, p: x.p * free })) : [])];
+      }
+      sc = sc.flatMap((x) => opts.map((y) => ({ conds: [...x.conds, ...y.conds], p: x.p * y.p })));
+    }
+    return sc.filter((x) => x.p > 1e-9).map((x) => ({ conds: new Set(x.conds), p: x.p }));
+  }
+  function peakConditions(uptime) {
+    const on = Object.keys(uptime).filter((c) => uptime[c] > 0).sort((a, b) => uptime[b] - uptime[a]);
+    const out = [];
+    for (const c of on) if (!out.some((x) => exclusiveWith(x, c))) out.push(c);
+    return new Set(out);
+  }
+
   function search(D, ctx, opts = {}) {
+    if (ctx.uptime) {
+      const peak = peakConditions(ctx.uptime);
+      const all = new Set(Object.keys(ctx.uptime).filter((c) => ctx.uptime[c] > 0));
+      const r = searchOne(D, { ...ctx, conditions: all, peak }, opts);
+      return { ...r, results: r.results.map((x) => ({ ...x, profile: [...peak] })), profiles: 1 };
+    }
     const profiles = legalProfiles(ctx.conditions);
     if (profiles.length > 1) {
       let all = [], evals = 0;
@@ -198,38 +253,71 @@
       .map((w) => ctx.weaponOverride && ctx.weaponIds && ctx.weaponIds.length === 1
         ? { ...w, ...ctx.weaponOverride, style: false } : w);
     let evals = 0;
+    const req = Object.fromEntries(Object.entries(ctx.required || {}).filter(([, l]) => l > 0));
+    const reqKeep = new Set(Object.keys(req).filter((id) => !D.skills[id]));
     for (const w of weapons) {
       const rel = relevantSkills(D, w, ctx);
+      Object.keys(req).forEach((id) => rel.add(id));
       const allocs = ctx.styleFixed && w.style ? [ctx.styleFixed] : styleAllocations(D, w);
       const drifts = D.drifts.filter((d) => rel.has(d.skill));
       const armor = prunedArmor(D, rel);
+      const add = (base, grants) => addLevels(D, base, grants, reqKeep);
+      const scoreOf = (al, levels, metric) => {
+        if (!ctx.uptime) { evals++; return metricOf(M.evaluate(D.config, mid, state, toInput(D, w, al, levels, ctx).inp), metric); }
+        let t = 0;
+        for (const sc of uptimeScenarios(uptimeConds(D, levels, ctx.uptime), ctx.uptime)) {
+          evals++;
+          t += sc.p * metricOf(M.evaluate(D.config, mid, state, toInput(D, w, al, levels, { ...ctx, conditions: sc.conds }).inp), metric);
+        }
+        return t;
+      };
       const cache = new Map();
       const best = (levels) => {
         const k = levelSig(levels);
         if (cache.has(k)) return cache.get(k);
         let b = { score: -Infinity, alloc: allocs[0] };
         for (const al of allocs) {
-          const { inp } = toInput(D, w, al, levels, ctx);
-          const r = M.evaluate(D.config, mid, state, inp); evals++;
-          const s = metricOf(r, ctx.metric);
+          const s = scoreOf(al, levels, ctx.metric);
           if (s > b.score) b = { score: s, alloc: al };
         }
         cache.set(k, b);
         return b;
+      };
+      const reqIds = Object.keys(req);
+      const lvIn = (p, id) => p.skills.filter(([x]) => x === id).reduce((t, [, l]) => t + l, 0);
+      const pieceMax = SLOTS.map((s) => Object.fromEntries(reqIds.map((id) => [id, Math.max(0, ...armor[s].map((p) => lvIn(p, id)))])));
+      const slotMax = SLOTS.map((s) => Math.max(0, ...armor[s].map((p) => p.driftSlots)));
+      const driftMax = Object.fromEntries(reqIds.map((id) => [id, Math.max(0, ...drifts.filter((d) => d.skill === id).map((d) => d.level))]));
+      const deficit = (lv) => reqIds.map((id) => Math.max(0, req[id] - (lv[id] || 0)));
+      const feasible = (lv, si, freeDrift) => {
+        if (!reqIds.length) return true;
+        const def = deficit(lv);
+        let need = 0, free = freeDrift;
+        for (let j = si + 1; j < SLOTS.length; j++) free += slotMax[j];
+        for (let k = 0; k < reqIds.length; k++) {
+          let d = def[k];
+          for (let j = si + 1; j < SLOTS.length; j++) d -= pieceMax[j][reqIds[k]];
+          if (d <= 0) continue;
+          if (!driftMax[reqIds[k]]) return false;
+          need += Math.ceil(d / driftMax[reqIds[k]]);
+        }
+        return need <= free;
       };
       const rank = (lv) => { const b = best(lv); return b.score === -Infinity ? -1e12 + bestExpected(lv) : b.score; };
       const expCache = new Map();
       const bestExpected = (lv) => {
         const k = levelSig(lv); if (expCache.has(k)) return expCache.get(k);
         let v = -Infinity;
-        for (const al of allocs) { const { inp } = toInput(D, w, al, lv, ctx); v = Math.max(v, M.evaluate(D.config, mid, state, inp).expected); evals++; }
+        for (const al of allocs) v = Math.max(v, scoreOf(al, lv, 'expected'));
         expCache.set(k, v); return v;
       };
-      let beam = [{ armor: {}, levels: addLevels(D, {}, weaponSkills(w, ctx.styleLevel == null ? 20 : ctx.styleLevel)), slots: 0, drifts: [] }];
-      for (const slot of SLOTS) {
-        const next = [];
+      let beam = [{ armor: {}, levels: add({}, weaponSkills(w, ctx.styleLevel == null ? 20 : ctx.styleLevel)), slots: 0, drifts: [] }];
+      for (let si = 0; si < SLOTS.length; si++) {
+        const slot = SLOTS[si];
+        let next = [];
         for (const st of beam) for (const p of armor[slot])
-          next.push({ armor: { ...st.armor, [slot]: p }, levels: addLevels(D, st.levels, p.skills), slots: st.slots + p.driftSlots, drifts: st.drifts });
+          next.push({ armor: { ...st.armor, [slot]: p }, levels: add(st.levels, p.skills), slots: st.slots + p.driftSlots, drifts: st.drifts });
+        next = next.filter((x) => feasible(x.levels, si, x.slots));
         next.forEach((x) => { x.rank = rank(x.levels); });
         next.sort((a, b) => b.rank - a.rank);
         const seen = new Set(); beam = [];
@@ -237,21 +325,22 @@
       }
       const maxSlots = Math.max(0, ...beam.map((x) => x.slots));
       for (let step = 0; step < maxSlots; step++) {
-        const next = [];
+        let next = [];
         for (const st of beam) {
           if (step >= st.slots) { next.push(st); continue; }
-          for (const d of drifts) next.push({ ...st, levels: addLevels(D, st.levels, [[d.skill, d.level]]), drifts: [...st.drifts, d] });
+          for (const d of drifts) next.push({ ...st, levels: add(st.levels, [[d.skill, d.level]]), drifts: [...st.drifts, d] });
           if (!drifts.length) next.push(st);
         }
+        next = next.filter((x) => feasible(x.levels, SLOTS.length - 1, Math.max(0, x.slots - x.drifts.length)));
         next.forEach((x) => { x.rank = rank(x.levels); });
         next.sort((a, b) => b.rank - a.rank);
         const seen = new Set(); beam = [];
         for (const x of next) { const k = x.slots + '#' + x.drifts.length + '#' + levelSig(x.levels); if (seen.has(k)) continue; seen.add(k); beam.push(x); if (beam.length >= beamWidth) break; }
       }
-      for (const st of beam.slice(0, opts.perWeapon || 6)) {
+      for (const st of beam.filter((x) => deficit(x.levels).every((d) => !d)).slice(0, opts.perWeapon || 6)) {
         const b = best(st.levels);
         if (b.score === -Infinity) continue;
-        const { inp, active: act } = toInput(D, w, b.alloc, st.levels, ctx);
+        const { inp, active: act } = toInput(D, w, b.alloc, st.levels, ctx.uptime ? { ...ctx, conditions: ctx.peak } : ctx);
         const r = M.evaluate(D.config, mid, state, inp);
         push({ weapon: w, style: w.style ? styleCode(b.alloc) : '', alloc: b.alloc, armor: st.armor, drifts: st.drifts,
           levels: st.levels, activeSkills: act, input: inp, result: r, score: b.score });
@@ -261,6 +350,6 @@
     return { results: results.slice(0, topK), evals };
   }
 
-  const api = { SLOTS, METRICS, EXCLUSIVE, legalProfiles, search, toInput, metricAvailability, styleAllocations, styleCode, addLevels, weaponSkills };
+  const api = { SLOTS, METRICS, EXCLUSIVE, legalProfiles, uptimeScenarios, peakConditions, search, toInput, metricAvailability, styleAllocations, styleCode, addLevels, weaponSkills };
   if (typeof module !== 'undefined') module.exports = api; else root.MHNOptimizer = api;
 })(typeof window !== 'undefined' ? window : (typeof self !== 'undefined' ? self : globalThis));
