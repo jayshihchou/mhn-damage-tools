@@ -73,6 +73,7 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
 .req button,.reqs button{padding:3px 10px;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:4px;cursor:pointer}
 .reqs{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}
 .reqs span{display:inline-flex;gap:4px;align-items:center;border:1px solid var(--accent);border-radius:12px;padding:1px 4px 1px 10px;font-size:12px}
+.reqs span.ex{border-color:var(--muted);color:var(--muted);text-decoration:line-through}
 .reqs span button{border:0;padding:0 6px;background:none;color:var(--muted)}
 .presets button{padding:3px 10px;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:4px;cursor:pointer}
 </style>
@@ -114,10 +115,10 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
   <div class="metric" id="metric"></div>
   <p class="note" id="metricNote"></p>
 
-  <h2>必帶技能</h2>
+  <h2>必帶／排除技能</h2>
   <div class="req"><select id="reqSkill"></select><select id="reqLv" class="lv"></select><button type="button" id="reqAdd">加入</button></div>
   <div class="reqs" id="reqs"></div>
-  <p class="note">只列出達到這些等級的配裝。適合放傷害算不出來、但你想帶的技能（例如集中、鎖定），或想看看帶了某個條件技能後最好的配法。</p>
+  <p class="note">選等級＝必帶：只列出達到這些等級的配裝，適合放傷害算不出來、但你想帶的技能（例如集中、鎖定）。選「排除」＝有這個技能的武器、防具、漂流石都不會用。</p>
 
   <h2>戰鬥狀況（技能發動條件）</h2>
   <div class="mode"><label><input type="radio" name="mode" value="max" checked>最高傷害（條件全發動）</label><label><input type="radio" name="mode" value="dps">平均傷害（依發動率）</label></div>
@@ -142,11 +143,11 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
   <div id="out"></div>
 </section>
 </main>
-<script src="data.js?v=2026111203"></script>
-<script src="damage.js?v=2026111203"></script>
-<script src="optimizer.js?v=2026111203"></script>
-<script src="picker.js?v=2026111203"></script>
-<script src="compare-core.js?v=2026111203"></script>
+<script src="data.js?v=2026111204"></script>
+<script src="damage.js?v=2026111204"></script>
+<script src="optimizer.js?v=2026111204"></script>
+<script src="picker.js?v=2026111204"></script>
+<script src="compare-core.js?v=2026111204"></script>
 <script>
 (function(){
   const D = window.MHN_DATA, O = window.MHNOptimizer, $ = (id) => document.getElementById(id);
@@ -216,12 +217,18 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
   const reqList = [...gearIds].sort((a, b) => skillZh(a).localeCompare(skillZh(b), 'zh-Hant'));
   fill($('reqSkill'), reqList.map(id => [id, skillZh(id) + (D.skills[id] ? '' : '（不計傷害）')]));
   const maxLv = (id) => D.skills[id] ? D.skills[id].max : 5;
-  const syncReqLv = () => fill($('reqLv'), Array.from({ length: maxLv($('reqSkill').value) }, (_, i) => [i + 1, 'Lv' + (i + 1)]));
+  const syncReqLv = () => fill($('reqLv'), [...Array.from({ length: maxLv($('reqSkill').value) }, (_, i) => [i + 1, 'Lv' + (i + 1)]), ['x', '排除']]);
   $('reqSkill').addEventListener('change', syncReqLv); syncReqLv();
-  let required = {};
-  const renderReqs = () => { $('reqs').innerHTML = Object.entries(required).map(([id, l]) => `<span>${skillZh(id)} Lv${l}<button type="button" data-r="${id}" title="移除">×</button></span>`).join(''); };
-  $('reqAdd').addEventListener('click', () => { required[$('reqSkill').value] = Number($('reqLv').value); renderReqs(); saveState(); });
-  $('reqs').addEventListener('click', (e) => { const b = e.target.closest('button[data-r]'); if (!b) return; delete required[b.dataset.r]; renderReqs(); saveState(); });
+  let required = {}, excluded = [];
+  const renderReqs = () => { $('reqs').innerHTML = [...Object.entries(required).map(([id, l]) => `<span>必帶 ${skillZh(id)} Lv${l}<button type="button" data-r="${id}" title="移除">×</button></span>`),
+    ...excluded.map(id => `<span class="ex" title="排除">${skillZh(id)}<button type="button" data-r="${id}" title="移除">×</button></span>`)].join(''); };
+  $('reqAdd').addEventListener('click', () => {
+    const id = $('reqSkill').value, v = $('reqLv').value;
+    delete required[id]; excluded = excluded.filter(x => x !== id);
+    if (v === 'x') excluded.push(id); else required[id] = Number(v);
+    renderReqs(); saveState();
+  });
+  $('reqs').addEventListener('click', (e) => { const b = e.target.closest('button[data-r]'); if (!b) return; delete required[b.dataset.r]; excluded = excluded.filter(x => x !== b.dataset.r); renderReqs(); saveState(); });
 
   const syncOv = () => {
     const w = D.weapons.find(x => x.id === $('weaponPick').value);
@@ -256,7 +263,7 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
     const s = {}; FIELDS.forEach(id => s[id] = val($(id)));
     s.metric = (document.querySelector('input[name=metric]:checked') || {}).value;
     s.conds = [...document.querySelectorAll('#conds input[type=checkbox]:checked')].map(x => x.value);
-    s.mode = mode(); s.required = required;
+    s.mode = mode(); s.required = required; s.excluded = excluded;
     s.uptime = Object.fromEntries([...document.querySelectorAll('#conds .up')].map(x => [x.dataset.c, Number(x.value)]));
     try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) {}
   }
@@ -274,6 +281,7 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
     document.querySelectorAll('#conds .up').forEach(x => { if (s.uptime && s.uptime[x.dataset.c] != null) x.value = s.uptime[x.dataset.c]; });
     const md = document.querySelector(`input[name=mode][value="${s.mode}"]`); if (md) md.checked = true;
     required = Object.fromEntries(Object.entries(s.required || {}).filter(([id]) => gearIds.has(id)));
+    excluded = (s.excluded || []).filter(id => gearIds.has(id));
   }
   loadState(); syncMode(); renderReqs();
   const mp = MHNPicker.monsterItems(D, sorted);
@@ -298,7 +306,7 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
     const ctx = {
       monsterId: $('monster').value, state: curState(), conditions: conds,
       move: { mv: Number($('mv').value) || 0, phys: $('phys').value, sp, charge, spPct: Number($('spPct').value) || 100 },
-      metric, uptime, required: { ...required }, ferocityChance: Number($('ferocityChance').value) || 0, stackMode: $('stackMode').value,
+      metric, uptime, required: { ...required }, excluded: [...excluded], ferocityChance: Number($('ferocityChance').value) || 0, stackMode: $('stackMode').value,
       weaponIds: wp === '*' ? null : [wp],
       weaponOverride: wp !== '*' && $('ovOn').checked ? { attack: Number($('ovAtk').value) || 0, elementValue: Number($('ovEle').value) || 0, affinity: Number($('ovAff').value) || 0 } : null,
       styleLevel: sp2 === 'none' ? 0 : 20,
@@ -306,7 +314,7 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
     };
     $('go').disabled = true; $('prog').hidden = false; $('prog').value = 0;
     $('summary').textContent = '計算中…'; $('out').innerHTML = '';
-    worker = new Worker('optimizer-worker.js?v=2026111203');
+    worker = new Worker('optimizer-worker.js?v=2026111204');
     worker.onmessage = (ev) => {
       const m = ev.data;
       if (m.type === 'progress') { $('prog').max = m.n; $('prog').value = m.i; return; }
@@ -323,10 +331,11 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
   }
   function render(m, ctx, metric){
     const reqTxt = Object.entries(ctx.required || {}).map(([id, l]) => `${skillZh(id)} Lv${l}`).join('、');
-    if (!m.results.length) { $('summary').textContent = reqTxt ? `沒有配裝能同時帶到：${reqTxt}（也可能此條件下「${METRIC_ZH[metric]}」無法達成）。` : `沒有配裝能達成「${METRIC_ZH[metric]}」。`; return; }
+    const exTxt = (ctx.excluded || []).map(skillZh).join('、');
+    if (!m.results.length) { $('summary').textContent = reqTxt ? `沒有配裝能同時帶到：${reqTxt}${exTxt ? `（排除：${exTxt}）` : ''}（也可能此條件下「${METRIC_ZH[metric]}」無法達成）。` : `沒有配裝能達成「${METRIC_ZH[metric]}」。`; return; }
     const cond = ctx.uptime ? (Object.entries(ctx.uptime).filter(([, v]) => v > 0).map(([c, v]) => `${COND_ZH[c]||c} ${v}%`).join('、') || '無')
       : (ctx.conditions.map(c => COND_ZH[c]||c).join('、') || '無');
-    $('summary').textContent = `${mName(ctx.monsterId)}｜MV ${ctx.move.mv}${ctx.move.sp?'（SP）':''}｜${ctx.uptime ? '發動率' : '條件'}：${cond}${reqTxt ? `｜必帶：${reqTxt}` : ''}｜排序：${ctx.uptime ? '平均 ' : ''}${METRIC_ZH[metric]}｜${m.profiles > 1 ? `互斥條件拆成 ${m.profiles} 組｜` : ''}評估 ${m.evals.toLocaleString()} 次，${(m.ms/1000).toFixed(1)} 秒`;
+    $('summary').textContent = `${mName(ctx.monsterId)}｜MV ${ctx.move.mv}${ctx.move.sp?'（SP）':''}｜${ctx.uptime ? '發動率' : '條件'}：${cond}${reqTxt ? `｜必帶：${reqTxt}` : ''}${exTxt ? `｜排除：${exTxt}` : ''}｜排序：${ctx.uptime ? '平均 ' : ''}${METRIC_ZH[metric]}｜${m.profiles > 1 ? `互斥條件拆成 ${m.profiles} 組｜` : ''}評估 ${m.evals.toLocaleString()} 次，${(m.ms/1000).toFixed(1)} 秒`;
     const byId = Object.fromEntries(D.armor.map(a => [a.id, a]));
     const drById = Object.fromEntries(D.drifts.map(d => [d.id, d]));
     const sig = (r) => r.outcomes.map(o => o.kind + o.damage).join('|') + '|' + r.expected.toFixed(1) + '|' + r.score.toFixed(2);

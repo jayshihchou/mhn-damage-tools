@@ -239,6 +239,12 @@
   }
 
   function searchOne(D, ctx, opts = {}) {
+    const ex = new Set(ctx.excluded || []);
+    if (ex.size) {
+      const clean = (list) => !list.some(([id]) => ex.has(id));
+      D = { ...D, armor: D.armor.filter((a) => clean(a.skills)), drifts: D.drifts.filter((d) => !ex.has(d.skill)),
+        weapons: D.weapons.filter((w) => clean(weaponSkills(w, ctx.styleLevel == null ? 20 : ctx.styleLevel))) };
+    }
     const beamWidth = opts.beamWidth || 40, topK = opts.topK || 10;
     const state = ctx.state, mid = ctx.monsterId;
     const results = [];
