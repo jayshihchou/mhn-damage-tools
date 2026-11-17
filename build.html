@@ -114,6 +114,10 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
   <h2>最佳化目標</h2>
   <div class="metric" id="metric"></div>
   <p class="note" id="metricNote"></p>
+  <div id="comboBox" hidden>
+    <label class="wide">連段<select id="combo"></select></label>
+    <p class="note">DPS＝一輪連段的總期望傷害 ÷ 一輪時間，自動選每段蓄到幾級最划算。時間取自遊戲動作資料（蓄力每級約 1.03 秒、可接下一招的時間點），集中會縮短蓄力時間（Lv1–5：5／10／15／20／30%）。上面的「招式」設定不使用。不計移動、被打斷、SP 技。</p>
+  </div>
 
   <h2>必帶／排除技能</h2>
   <div class="req"><select id="reqSkill"></select><select id="reqLv" class="lv"></select><button type="button" id="reqAdd">加入</button></div>
@@ -143,11 +147,11 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
   <div id="out"></div>
 </section>
 </main>
-<script src="data.js?v=2026111204"></script>
-<script src="damage.js?v=2026111204"></script>
-<script src="optimizer.js?v=2026111204"></script>
-<script src="picker.js?v=2026111204"></script>
-<script src="compare-core.js?v=2026111204"></script>
+<script src="data.js?v=2026111705"></script>
+<script src="damage.js?v=2026111705"></script>
+<script src="optimizer.js?v=2026111705"></script>
+<script src="picker.js?v=2026111705"></script>
+<script src="compare-core.js?v=2026111705"></script>
 <script>
 (function(){
   const D = window.MHN_DATA, O = window.MHNOptimizer, $ = (id) => document.getElementById(id);
@@ -163,7 +167,7 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
   COND_ZH['statusBuildupProc'] = '異常累積觸發時';
   const HIDDEN = new Set(['monster.weakPoint', 'chargedAttack', 'wakeUpHit']);
   COND_ZH['monster.sleeping'] = '怪物睡眠中（叫醒攻擊）';
-  const METRIC_ZH = {expected:'期望值（計入會心機率）', crit:'會心一刀（正會心）', ferocity:'凶會心一刀', none:'無會心一刀'};
+  const METRIC_ZH = {expected:'期望值（計入會心機率）', crit:'會心一刀（正會心）', ferocity:'凶會心一刀', none:'無會心一刀', dps:'每秒傷害 DPS（大劍蓄力連段）'};
   const fill = (sel, items) => { sel.innerHTML = items.map(([v,t]) => `<option value="${v}">${t}</option>`).join(''); };
 
   const ids = Object.keys(D.monsters).filter(m => D.monsters[m].parts.some(p => p.states.length));
@@ -194,6 +198,10 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
   $('metric').innerHTML = O.METRICS.map(k => `<label class="${avail[k]?'':'off'}"><input type="radio" name="metric" value="${k}" ${k==='expected'?'checked':''} ${avail[k]?'':'disabled'}>${METRIC_ZH[k]}${avail[k]?'':'（目前裝備無法達成）'}</label>`).join('');
   $('metricNote').textContent = '只考慮能產生該結果的配裝：會心一刀需會心率 > 0；凶會心一刀需帶「凶會心」且會心率 < 0。';
 
+  const COMBOS = (D.combos && D.combos.GREAT_SWORD) || [];
+  fill($('combo'), [['best', '自動選最佳'], ...COMBOS.map(c => [c.id, c.zh + (c.steps.length > 1 ? ' 循環' : ' 重複')])]);
+  const syncMetric = () => { $('comboBox').hidden = (document.querySelector('input[name=metric]:checked') || {}).value !== 'dps'; };
+  $('metric').addEventListener('change', syncMetric);
   const UP_DEF = {'hp.full':70,'hp.low':10,'consecutiveHits':60,'monster.partBroken':50,'risingTide2':50,'afterRoar':15,'afterSpecialSkill':20,'attackFromBehind':30,
     'perfectEvade':20,'forwardDodge':20,'noEvade10s':40,'perfectChargeRelease':70,'spGaugeFull':20,'spGaugeNotFull':80,'monster.paralyzed':5,'monster.sleeping':3,
     'monster.poisoned':30,'groupHunt':0,'latentPower':30,'tookDamage':20,'perfectGuard':10,'revived':0,'statusBuildupProc':10,'player.statusAilment':30,'recoveredFromStatus':20,'player.bloodblight':30};
@@ -256,7 +264,7 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
   refreshParts();
 
   const KEY = 'mhn-build-v1';
-  const FIELDS = ['monster','part','move','mv','spPct','phys','weaponPick','stylePick','ovOn','ovAtk','ovEle','ovAff','ferocityChance','stackMode','beam'];
+  const FIELDS = ['combo','monster','part','move','mv','spPct','phys','weaponPick','stylePick','ovOn','ovAtk','ovEle','ovAff','ferocityChance','stackMode','beam'];
   const val = (el) => el.type === 'checkbox' ? el.checked : el.value;
   const setVal = (el, v) => { if (v == null) return; if (el.type === 'checkbox') el.checked = !!v; else if (el.tagName !== 'SELECT' || [...el.options].some(o => o.value === v)) el.value = v; };
   function saveState(){
@@ -277,13 +285,14 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
     setVal($('weaponPick'), s.weaponPick); syncOv();
     ['stylePick','ovOn','ovAtk','ovEle','ovAff','ferocityChance','beam'].forEach(id => setVal($(id), s[id]));
     const m = document.querySelector(`input[name=metric][value="${s.metric}"]:not(:disabled)`); if (m) m.checked = true;
+    setVal($('combo'), s.combo);
     document.querySelectorAll('#conds input[type=checkbox]').forEach(x => { x.checked = !x.disabled && (s.conds || []).includes(x.value); });
     document.querySelectorAll('#conds .up').forEach(x => { if (s.uptime && s.uptime[x.dataset.c] != null) x.value = s.uptime[x.dataset.c]; });
     const md = document.querySelector(`input[name=mode][value="${s.mode}"]`); if (md) md.checked = true;
     required = Object.fromEntries(Object.entries(s.required || {}).filter(([id]) => gearIds.has(id)));
     excluded = (s.excluded || []).filter(id => gearIds.has(id));
   }
-  loadState(); syncMode(); renderReqs();
+  loadState(); syncMode(); renderReqs(); syncMetric();
   const mp = MHNPicker.monsterItems(D, sorted);
   const monsterPicker = MHNPicker.attach($('monster'), mp);
   const wp = MHNPicker.weaponItems(D, [{ value: '*', label: '全部大劍（自動選）', sub: '53 把一起比較' }]);
@@ -306,7 +315,7 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
     const ctx = {
       monsterId: $('monster').value, state: curState(), conditions: conds,
       move: { mv: Number($('mv').value) || 0, phys: $('phys').value, sp, charge, spPct: Number($('spPct').value) || 100 },
-      metric, uptime, required: { ...required }, excluded: [...excluded], ferocityChance: Number($('ferocityChance').value) || 0, stackMode: $('stackMode').value,
+      metric, comboId: $('combo').value, uptime, required: { ...required }, excluded: [...excluded], ferocityChance: Number($('ferocityChance').value) || 0, stackMode: $('stackMode').value,
       weaponIds: wp === '*' ? null : [wp],
       weaponOverride: wp !== '*' && $('ovOn').checked ? { attack: Number($('ovAtk').value) || 0, elementValue: Number($('ovEle').value) || 0, affinity: Number($('ovAff').value) || 0 } : null,
       styleLevel: sp2 === 'none' ? 0 : 20,
@@ -314,7 +323,7 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
     };
     $('go').disabled = true; $('prog').hidden = false; $('prog').value = 0;
     $('summary').textContent = '計算中…'; $('out').innerHTML = '';
-    worker = new Worker('optimizer-worker.js?v=2026111204');
+    worker = new Worker('optimizer-worker.js?v=2026111705');
     worker.onmessage = (ev) => {
       const m = ev.data;
       if (m.type === 'progress') { $('prog').max = m.n; $('prog').value = m.i; return; }
@@ -335,10 +344,16 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
     if (!m.results.length) { $('summary').textContent = reqTxt ? `沒有配裝能同時帶到：${reqTxt}${exTxt ? `（排除：${exTxt}）` : ''}（也可能此條件下「${METRIC_ZH[metric]}」無法達成）。` : `沒有配裝能達成「${METRIC_ZH[metric]}」。`; return; }
     const cond = ctx.uptime ? (Object.entries(ctx.uptime).filter(([, v]) => v > 0).map(([c, v]) => `${COND_ZH[c]||c} ${v}%`).join('、') || '無')
       : (ctx.conditions.map(c => COND_ZH[c]||c).join('、') || '無');
-    $('summary').textContent = `${mName(ctx.monsterId)}｜MV ${ctx.move.mv}${ctx.move.sp?'（SP）':''}｜${ctx.uptime ? '發動率' : '條件'}：${cond}${reqTxt ? `｜必帶：${reqTxt}` : ''}${exTxt ? `｜排除：${exTxt}` : ''}｜排序：${ctx.uptime ? '平均 ' : ''}${METRIC_ZH[metric]}｜${m.profiles > 1 ? `互斥條件拆成 ${m.profiles} 組｜` : ''}評估 ${m.evals.toLocaleString()} 次，${(m.ms/1000).toFixed(1)} 秒`;
+    $('summary').textContent = `${mName(ctx.monsterId)}｜MV ${ctx.move.mv}${ctx.move.sp?'（SP）':''}｜${ctx.uptime ? '發動率' : '條件'}：${cond}${reqTxt ? `｜必帶：${reqTxt}` : ''}${exTxt ? `｜排除：${exTxt}` : ''}｜排序：${ctx.uptime ? '平均 ' : ''}${METRIC_ZH[metric]}${metric === 'dps' ? `（${$('combo').selectedOptions[0].textContent}）` : ''}｜${m.profiles > 1 ? `互斥條件拆成 ${m.profiles} 組｜` : ''}評估 ${m.evals.toLocaleString()} 次，${(m.ms/1000).toFixed(1)} 秒`;
     const byId = Object.fromEntries(D.armor.map(a => [a.id, a]));
     const drById = Object.fromEntries(D.drifts.map(d => [d.id, d]));
     const sig = (r) => r.outcomes.map(o => o.kind + o.damage).join('|') + '|' + r.expected.toFixed(1) + '|' + r.score.toFixed(2);
+    const planLine = (p) => {
+      if (!p) return '';
+      const c = COMBOS.find(x => x.id === p.combo);
+      const steps = c ? c.steps.map(([st], i) => `${st.zh} Lv${p.levels[i]}`).join(' → ') : '';
+      return `<div class="skills"><b>DPS ${Math.round(p.dps).toLocaleString()}</b>｜連段：${steps}${c && c.steps.length > 1 ? '（循環）' : '（重複）'}｜一輪 ${p.time.toFixed(2)} 秒、總期望傷害 ${Math.round(p.damage).toLocaleString()}｜集中縮短蓄力 ${p.focus}%</div>`;
+    };
     const groups = [];
     m.results.forEach((r, i) => { const g = groups.find(x => x.sig === sig(r)); if (g) g.alts.push(i); else groups.push({ sig: sig(r), main: i, alts: [] }); });
     const contrib = (a, id) => a.skills.filter(([s]) => s === id).reduce((t, [, l]) => t + l, 0);
@@ -372,9 +387,10 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
       const sw = (s) => { const x = swaps(r, s); return x.length ? `<small class="swap">可替換：${x.map(a => a.zh||a.name).join('、')}</small>` : ''; };
       return `<div class="card ${gi===0?'top':''} ${g.alts.length?'has-alts':''}"><div class="main">
         <h3><span class="rank">#${gi+1}</span>${w.zh||w.name}<small>（${ELEM_ZH[w.element]}${styleTxt}）</small>
-          <span class="score">${ctx.uptime ? `<small>平均</small> ${Math.round(r.score).toLocaleString()}` : metric==='expected' ? r.expected.toFixed(0) : r.score.toLocaleString()}</span></h3>
+          <span class="score">${metric === 'dps' ? `<small>DPS</small> ${Math.round(r.score).toLocaleString()}` : ctx.uptime ? `<small>平均</small> ${Math.round(r.score).toLocaleString()}` : metric==='expected' ? r.expected.toFixed(0) : r.score.toLocaleString()}</span></h3>
         <div class="grid"><div class="slot"><b>武器</b>${w.zh||w.name}${gearSkills(O.weaponSkills(w, r.style ? ctx.styleLevel : 0), w.style && r.style ? (w.styleSkills||[]) : [])}</div>${O.SLOTS.map(s => `<div class="slot"><b>${SLOT_ZH[s]}（漂流 ${byId[r.armor[s]].driftSlots}）</b>${byId[r.armor[s]].zh||byId[r.armor[s]].name}${gearSkills(byId[r.armor[s]].skills)}${driftLine(dbs[s])}${sw(s)}</div>`).join('')}</div>
-        ${ctx.uptime ? `<div class="skills">下面數字是所有勾選狀況都發動時（互斥的取發動率高的）</div>` : ''}
+        ${planLine(r.plan)}
+        ${metric === 'dps' ? `<div class="skills">下面數字是目前「招式」欄位的單發傷害${ctx.uptime ? '，所有勾選狀況都發動時' : ''}</div>` : ctx.uptime ? `<div class="skills">下面數字是所有勾選狀況都發動時（互斥的取發動率高的）</div>` : ''}
         <div class="nums">
           <span class="${cls('none')}">無會心 ${val('none')}${pct('none')}</span>
           <span class="${cls('crit')}">會心 ${val('plus')}${pct('plus')}</span>

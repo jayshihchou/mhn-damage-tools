@@ -14,7 +14,7 @@ self.onmessage = (ev) => {
       drifts: r.drifts.map((d) => d.id), levels: r.levels, activeSkills: r.activeSkills, input: r.input,
       outcomes: r.result.outcomes.map((o) => ({ kind: o.kind, prob: o.prob, damage: o.damage })),
       expected: r.result.expected, rate: r.result.rate, base: { physPct: r.result.base.physPct, elemPct: r.result.base.elemPct, weakPoint: r.result.base.weakPoint, ATK: r.result.base.ATK, ELE: r.result.base.ELE },
-      score: r.score, profile: r.profile,
+      score: r.score, profile: r.profile, plan: r.plan,
     }));
     self.postMessage({ type: 'done', results, evals: out.evals, profiles: out.profiles, ms: Date.now() - t0 });
   } catch (e) {

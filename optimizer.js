@@ -13,7 +13,22 @@
     elementMulOnCrit: 0, elementMulOnMinusCrit: 0, ailmentMul: 0, overridePhysicalPercentage: 0,
     ferocityProbability: 0, ferocityBoost: 100, paralyzed: false, outOfCritRange: false,
   };
-  const METRICS = ['expected', 'crit', 'ferocity', 'none'];
+  const METRICS = ['expected', 'crit', 'ferocity', 'none', 'dps'];
+  const FOCUS_PCT = [0, 5, 10, 15, 20, 30];
+  function stepTime(st, L, after, focus) {
+    const reach = L <= st.defaultLevel ? 0 : st.loopStart + (st.chargeStart + (L - st.defaultLevel - 1) * st.interval) * (1 - focus / 100);
+    return Math.max(st.releaseMin, reach) + (after === 'hold' ? st.hold : st.end);
+  }
+  function bestPlan(combo, dmg, focus) {
+    let best = null;
+    const rec = (i, lv, d, t) => {
+      if (i === combo.steps.length) { if (!best || d / t > best.dps) best = { dps: d / t, damage: d, time: t, levels: [...lv] }; return; }
+      const [st, after] = combo.steps[i];
+      for (let L = 1; L <= st.max; L++) rec(i + 1, [...lv, L], d + dmg(st, L), t + stepTime(st, L, after, focus));
+    };
+    rec(0, [], 0, 0);
+    return best;
+  }
 
   const styleClass = (w) => DIRECT.includes(w.element) ? 'elemental' : STATUS.includes(w.element) ? 'status' : 'raw';
   function styleAllocations(D, w) {
@@ -149,7 +164,7 @@
     const affinitySrc = D.weapons.some((w) => w.affinity > 0) || (D.style && Object.values(D.style.values).some((v) => v.affinity > 0)) || has((e) => e && e.affinityDelta > 0);
     const ferocity = has((e) => e && e.brutalCritMultiplier) && [...D.armor.flatMap((a) => a.skills), ...D.drifts.map((d) => [d.skill, d.level]), ...D.weapons.flatMap((w) => weaponSkills(w, 20))]
       .some(([id]) => Object.values((D.skills[id] || { levels: {} }).levels).some((e) => e && e.brutalCritMultiplier));
-    return { expected: true, none: true, crit: affinitySrc, ferocity };
+    return { expected: true, none: true, crit: affinitySrc, ferocity, dps: !!(D.combos && D.combos.GREAT_SWORD && D.combos.GREAT_SWORD.length) };
   }
 
   const EXCLUSIVE = [['hp.full', 'hp.low'], ['perfectEvade', 'noEvade10s'], ['forwardDodge', 'noEvade10s'], ['monster.paralyzed', 'monster.sleeping'], ['spGaugeFull', 'spGaugeNotFull']];
@@ -261,21 +276,43 @@
     let evals = 0;
     const req = Object.fromEntries(Object.entries(ctx.required || {}).filter(([, l]) => l > 0));
     const reqKeep = new Set(Object.keys(req).filter((id) => !D.skills[id]));
+    const dpsMode = ctx.metric === 'dps';
+    if (dpsMode) { ctx = { ...ctx, move: { ...ctx.move, sp: false, charge: true } }; reqKeep.add('focus'); }
+    const combos = dpsMode ? (D.combos.GREAT_SWORD || []).filter((c) => !ctx.comboId || ctx.comboId === 'best' || c.id === ctx.comboId) : [];
     for (const w of weapons) {
       const rel = relevantSkills(D, w, ctx);
       Object.keys(req).forEach((id) => rel.add(id));
+      if (dpsMode) rel.add('focus');
       const allocs = ctx.styleFixed && w.style ? [ctx.styleFixed] : styleAllocations(D, w);
       const drifts = D.drifts.filter((d) => rel.has(d.skill));
       const armor = prunedArmor(D, rel);
       const add = (base, grants) => addLevels(D, base, grants, reqKeep);
-      const scoreOf = (al, levels, metric) => {
-        if (!ctx.uptime) { evals++; return metricOf(M.evaluate(D.config, mid, state, toInput(D, w, al, levels, ctx).inp), metric); }
+      const scoreOf = (al, levels, metric, move) => {
+        const c0 = move ? { ...ctx, move: { ...ctx.move, ...move } } : ctx;
+        if (metric === 'dps') return scoreOf(al, levels, 'expected', { mv: 100, charge: true, sp: false }) / 100 * mvRate(levels.focus || 0);
+        if (!ctx.uptime) { evals++; return metricOf(M.evaluate(D.config, mid, state, toInput(D, w, al, levels, c0).inp), metric); }
         let t = 0;
         for (const sc of uptimeScenarios(uptimeConds(D, levels, ctx.uptime), ctx.uptime)) {
           evals++;
-          t += sc.p * metricOf(M.evaluate(D.config, mid, state, toInput(D, w, al, levels, { ...ctx, conditions: sc.conds }).inp), metric);
+          t += sc.p * metricOf(M.evaluate(D.config, mid, state, toInput(D, w, al, levels, { ...c0, conditions: sc.conds }).inp), metric);
         }
         return t;
+      };
+      const mvRates = new Map();
+      const mvRate = (fl) => {
+        if (!mvRates.has(fl)) mvRates.set(fl, Math.max(0, ...combos.map((c) => bestPlan(c, (st, L) => st.levels[L].reduce((t, h) => t + h.mv, 0), FOCUS_PCT[Math.min(5, fl)]).dps)));
+        return mvRates.get(fl);
+      };
+      const dpsOf = (al, levels) => {
+        const hc = new Map();
+        const hit = (h) => { const k = h.mv + (h.charge ? 'c' : '') + (h.sp ? 's' : ''); if (!hc.has(k)) hc.set(k, scoreOf(al, levels, 'expected', { mv: h.mv, charge: h.charge, sp: h.sp })); return hc.get(k); };
+        const focus = FOCUS_PCT[Math.min(5, levels.focus || 0)];
+        let best = { dps: -Infinity };
+        for (const c of combos) {
+          const p = bestPlan(c, (st, L) => st.levels[L].reduce((t, h) => t + hit(h), 0), focus);
+          if (p && p.dps > best.dps) best = { ...p, combo: c.id, focus };
+        }
+        return best;
       };
       const cache = new Map();
       const best = (levels) => {
@@ -344,18 +381,22 @@
         for (const x of next) { const k = x.slots + '#' + x.drifts.length + '#' + levelSig(x.levels); if (seen.has(k)) continue; seen.add(k); beam.push(x); if (beam.length >= beamWidth) break; }
       }
       for (const st of beam.filter((x) => deficit(x.levels).every((d) => !d)).slice(0, opts.perWeapon || 6)) {
-        const b = best(st.levels);
+        let b = best(st.levels);
+        if (dpsMode) {
+          b = { score: -Infinity };
+          for (const al of allocs) { const p = dpsOf(al, st.levels); if (p.dps > b.score) b = { score: p.dps, alloc: al, plan: p }; }
+        }
         if (b.score === -Infinity) continue;
         const { inp, active: act } = toInput(D, w, b.alloc, st.levels, ctx.uptime ? { ...ctx, conditions: ctx.peak } : ctx);
         const r = M.evaluate(D.config, mid, state, inp);
         push({ weapon: w, style: w.style ? styleCode(b.alloc) : '', alloc: b.alloc, armor: st.armor, drifts: st.drifts,
-          levels: st.levels, activeSkills: act, input: inp, result: r, score: b.score });
+          levels: st.levels, activeSkills: act, input: inp, result: r, score: b.score, plan: b.plan || null });
       }
       if (opts.onProgress) opts.onProgress(weapons.indexOf(w) + 1, weapons.length);
     }
     return { results: results.slice(0, topK), evals };
   }
 
-  const api = { SLOTS, METRICS, EXCLUSIVE, legalProfiles, uptimeScenarios, peakConditions, search, toInput, metricAvailability, styleAllocations, styleCode, addLevels, weaponSkills };
+  const api = { SLOTS, METRICS, FOCUS_PCT, stepTime, bestPlan, EXCLUSIVE, legalProfiles, uptimeScenarios, peakConditions, search, toInput, metricAvailability, styleAllocations, styleCode, addLevels, weaponSkills };
   if (typeof module !== 'undefined') module.exports = api; else root.MHNOptimizer = api;
 })(typeof window !== 'undefined' ? window : (typeof self !== 'undefined' ? self : globalThis));
