@@ -25,8 +25,28 @@
 .pk-chip::after{content:' ✕'}
 .pk-chip.clear{background:transparent;color:var(--muted);border:1px solid var(--line)}
 .pk-chip.clear::after{content:''}
-.pk-item small mark{background:none;color:var(--accent);font-weight:600}`;
+.pk-item small mark{background:none;color:var(--accent);font-weight:600}
+.pk-ov{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:flex-start;justify-content:center;padding:6vh 12px 12px}
+.pk-ov[hidden]{display:none}
+.pk-dlg{width:min(760px,100%);max-height:86vh;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.45)}
+.pk-dlg>header{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line);font-weight:600}
+.pk-dlg>header button{margin-left:auto;background:none;border:0;color:var(--muted);font-size:18px;cursor:pointer;line-height:1}
+.pk-dlg .pk-panel{border:0;margin:0;overflow:auto;padding:10px 12px;display:flex;flex-direction:column;min-height:0}
+.pk-dlg .pk-grid{max-height:none;flex:1;min-height:120px}
+.pk-dlg .pk-tabs{max-height:84px;overflow:auto}
+`;
   let styled = false;
+  let ov = null, ovClose = null;
+  function overlay() {
+    if (ov) return ov;
+    ov = document.createElement('div'); ov.className = 'pk-ov'; ov.hidden = true;
+    ov.innerHTML = '<div class="pk-dlg" role="dialog" aria-modal="true"><header><span class="pk-title"></span><button type="button" title="關閉" aria-label="關閉">✕</button></header></div>';
+    document.body.appendChild(ov);
+    const close = () => { if (ovClose) ovClose(); };
+    ov.addEventListener('click', (e) => { if (e.target === ov || e.target.closest('header button')) close(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !ov.hidden) close(); });
+    return ov;
+  }
 
   
   function attach(select, opts) {
@@ -36,14 +56,32 @@
     const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'pk-btn';
     select.insertAdjacentElement('afterend', btn);
     const panel = document.createElement('div'); panel.className = 'pk-panel'; panel.hidden = true;
-    host.insertAdjacentElement('afterend', panel);
+    const modal = !!opts.modal;
+    if (!modal) host.insertAdjacentElement('afterend', panel);
+    function open() {
+      panel.hidden = false; btn.classList.add('open');
+      if (modal) {
+        const o = overlay(), dlg = o.firstChild;
+        if (ovClose && ovClose !== close) ovClose();
+        dlg.querySelector('.pk-title').textContent = opts.title || '選擇';
+        dlg.querySelectorAll('.pk-panel').forEach((x) => x.remove());
+        dlg.appendChild(panel); o.hidden = false; ovClose = close;
+        document.body.style.overflow = 'hidden';
+      }
+      render();
+      if (modal && matchMedia('(pointer:fine)').matches) { const n = panel.querySelector('.pk-search'); if (n) n.focus(); }
+    }
+    function close() {
+      panel.hidden = true; btn.classList.remove('open');
+      if (modal && ov && ovClose === close) { ov.hidden = true; ovClose = null; panel.remove(); document.body.style.overflow = ''; }
+    }
     let tab = 'all', q = '', items = opts.items || [];
     const tabs = [{ key: 'all', label: '全部' }, ...(opts.tabs || [])];
 
     const current = () => items.find((i) => i.value === select.value);
     function sync() {
       const c = current();
-      btn.textContent = c ? c.label + (c.sub ? `　${c.sub}` : '') : (opts.placeholder || '選擇…');
+      btn.textContent = c ? c.label + (c.sub && !opts.modal ? `　${c.sub}` : '') : (opts.placeholder || '選擇…');
       if (!panel.hidden) render();
     }
     const F = opts.skillFilter;
@@ -66,11 +104,11 @@
     function render() {
       if (F) return renderFilter();
       const vis = items.filter((i) => i.top || ((tab === 'all' || (i.tags || []).includes(tab)) &&
-        (!q || (i.label + ' ' + (i.sub || '') + ' ' + i.value).toLowerCase().includes(q))));
+        (!q || (i.label + ' ' + (i.sub || '') + ' ' + (i.search || '') + ' ' + i.value).toLowerCase().includes(q))));
       const counts = Object.fromEntries(tabs.map((t) => [t.key, t.key === 'all' ? items.filter((i) => !i.top).length : items.filter((i) => (i.tags || []).includes(t.key)).length]));
       panel.innerHTML =
         `<div class="pk-tabs">${tabs.filter((t) => counts[t.key]).map((t) => `<button type="button" class="pk-tab ${t.key === tab ? 'on' : ''}" data-tab="${t.key}">${t.label} ${counts[t.key]}</button>`).join('')}</div>` +
-        `<input class="pk-search" placeholder="搜尋名稱…" value="${q.replace(/"/g, '&quot;')}">` +
+        `<input class="pk-search" placeholder="${opts.searchPlaceholder || '搜尋名稱…'}" value="${q.replace(/"/g, '&quot;')}">` +
         `<div class="pk-grid">${vis.map((i) => `<button type="button" class="pk-item ${i.top ? 'top' : ''} ${i.value === select.value ? 'sel' : ''}" data-v="${i.value}">${i.label}${i.sub ? `<small>${i.sub}</small>` : ''}</button>`).join('') || '<div class="pk-empty">沒有符合的項目</div>'}</div>`;
       const s = panel.querySelector('.pk-search');
       s.addEventListener('input', () => { q = s.value.trim().toLowerCase(); const pos = s.selectionStart; render(); const n = panel.querySelector('.pk-search'); n.focus(); n.setSelectionRange(pos, pos); });
@@ -85,9 +123,9 @@
       const it = e.target.closest('[data-v]'); if (!it) return;
       select.value = it.dataset.v;
       select.dispatchEvent(new Event('change', { bubbles: true }));
-      panel.hidden = true; btn.classList.remove('open'); sync();
+      close(); sync();
     });
-    btn.addEventListener('click', (e) => { e.preventDefault(); panel.hidden = !panel.hidden; btn.classList.toggle('open', !panel.hidden); if (!panel.hidden) render(); });
+    btn.addEventListener('click', (e) => { e.preventDefault(); if (panel.hidden) open(); else close(); });
     select.addEventListener('change', sync);
     sync();
     return { sync, setItems(next) { items = next; sync(); } };
@@ -155,5 +193,16 @@
     return out;
   }
 
-  root.MHNPicker = { attach, monsterItems, weaponItems, monsterName, armorItems, skillGroups };
+  function skillItems(D, entries, top) {
+    const zh = (id) => (D.skills[id] && D.skills[id].zh) || (D.skillNames || {})[id] || id;
+    const groups = skillGroups(D, [...new Set(entries.map((e) => e.skill))]).filter((g) => g.key !== 'all');
+    const tagsOf = {}; groups.forEach((g) => g.ids.forEach((id) => (tagsOf[id] = tagsOf[id] || []).push(g.key)));
+    const gl = Object.fromEntries(groups.map((g) => [g.key, g.label.replace(/（.*）/, '')]));
+    const items = [...(top || []).map((t) => ({ ...t, top: true })),
+      ...entries.map((e) => ({ value: e.value, label: e.label || zh(e.skill), search: zh(e.skill) + ' ' + e.skill,
+        sub: e.sub != null ? e.sub : (tagsOf[e.skill] || []).map((k) => gl[k]).join('・'), tags: tagsOf[e.skill] || [] }))];
+    return { items, tabs: groups.map((g) => ({ key: g.key, label: g.label })) };
+  }
+
+  root.MHNPicker = { attach, monsterItems, weaponItems, monsterName, armorItems, skillGroups, skillItems };
 })(window);

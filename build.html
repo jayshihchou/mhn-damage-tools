@@ -70,6 +70,7 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
 .req{display:flex;gap:6px;align-items:center}
 .req select{flex:1}
 .req select.lv{flex:0 0 70px}
+.req .pk-btn{flex:1;min-width:0}
 .req button,.reqs button{padding:3px 10px;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:4px;cursor:pointer}
 .reqs{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}
 .reqs span{display:inline-flex;gap:4px;align-items:center;border:1px solid var(--accent);border-radius:12px;padding:1px 4px 1px 10px;font-size:12px}
@@ -147,11 +148,11 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
   <div id="out"></div>
 </section>
 </main>
-<script src="data.js?v=2026111706"></script>
-<script src="damage.js?v=2026111706"></script>
-<script src="optimizer.js?v=2026111706"></script>
-<script src="picker.js?v=2026111706"></script>
-<script src="compare-core.js?v=2026111706"></script>
+<script src="data.js?v=2026111708"></script>
+<script src="damage.js?v=2026111708"></script>
+<script src="optimizer.js?v=2026111708"></script>
+<script src="picker.js?v=2026111708"></script>
+<script src="compare-core.js?v=2026111708"></script>
 <script>
 (function(){
   const D = window.MHN_DATA, O = window.MHNOptimizer, $ = (id) => document.getElementById(id);
@@ -227,6 +228,13 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
   const maxLv = (id) => D.skills[id] ? D.skills[id].max : 5;
   const syncReqLv = () => fill($('reqLv'), [...Array.from({ length: maxLv($('reqSkill').value) }, (_, i) => [i + 1, 'Lv' + (i + 1)]), ['x', '排除']]);
   $('reqSkill').addEventListener('change', syncReqLv); syncReqLv();
+  {
+    const driftSk = new Set(D.drifts.map(d => d.skill));
+    const R = MHNPicker.skillItems(D, reqList.map(id => ({ value: id, skill: id })));
+    R.items.forEach(i => { i.sub = [i.sub, driftSk.has(i.value) ? '有漂流石' : '', D.skills[i.value] ? '' : '不計傷害'].filter(Boolean).join('｜'); });
+    R.tabs.push({ key: 'drift', label: '有漂流石' }); R.items.forEach(i => { if (driftSk.has(i.value)) i.tags.push('drift'); });
+    MHNPicker.attach($('reqSkill'), { ...R, modal: true, title: '選擇必帶／排除技能', searchPlaceholder: '搜尋技能…' });
+  }
   let required = {}, excluded = [];
   const renderReqs = () => { $('reqs').innerHTML = [...Object.entries(required).map(([id, l]) => `<span>必帶 ${skillZh(id)} Lv${l}<button type="button" data-r="${id}" title="移除">×</button></span>`),
     ...excluded.map(id => `<span class="ex" title="排除">${skillZh(id)}<button type="button" data-r="${id}" title="移除">×</button></span>`)].join(''); };
@@ -323,7 +331,7 @@ button.edit{margin-top:8px;padding:5px 12px;background:transparent;color:var(--a
     };
     $('go').disabled = true; $('prog').hidden = false; $('prog').value = 0;
     $('summary').textContent = '計算中…'; $('out').innerHTML = '';
-    worker = new Worker('optimizer-worker.js?v=2026111706');
+    worker = new Worker('optimizer-worker.js?v=2026111708');
     worker.onmessage = (ev) => {
       const m = ev.data;
       if (m.type === 'progress') { $('prog').max = m.n; $('prog').value = m.i; return; }
